@@ -42,9 +42,16 @@
 // Note: if you use this with ENABLE_GxEPD2_GFX 1:
 //       uncomment it in GxEPD2_GFX.h too, or add #include <GFX.h> before any #include <GxEPD2_GFX.h>
 
+#include <Arduino.h>
+#include <WiFi.h>
+#include <lwip/apps/sntp.h>
+#include <time.h>
+
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
+
+#include "secrets.h"
 
 // copy the constructor from GxEPD2_display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
@@ -69,6 +76,7 @@ GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(GxEPD2_750_T7(/*CS=*
 SPIClass hspi(HSPI);
 #endif
 
+void connectWifi();
 void helloWorld();
 void helloFullScreenPartialMode();
 void helloArduino();
@@ -85,8 +93,9 @@ void showPartialUpdate();
 void setup()
 {
   Serial.begin(115200);
-  Serial.println();
   Serial.println("setup");
+  connectWifi();
+
   // *** special handling for Waveshare ESP32 Driver board *** //
   // ********************************************************* //
 #if defined(ESP32) && defined(USE_HSPI_FOR_EPD)
@@ -1057,3 +1066,35 @@ void drawBitmaps3c400x300()
   }
 }
 #endif
+
+void connectWifi()
+{
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.println("Establishing connection to WiFi..");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(1000);
+  }
+
+  Serial.printf("Connected to network %s\n", WIFI_SSID);
+
+  // Sync SNTP
+  sntp_setoperatingmode(SNTP_OPMODE_POLL);
+
+  char server[] = "time.nist.gov"; // sntp_setservername takes a non-const char*, so use a non-const variable to avoid warning
+  sntp_setservername(0, server);
+  sntp_init();
+
+  Serial.println("Waiting for NTP time sync...");
+  Serial.printf("Syncing NTP time via %s...\n", server);
+  time_t now;
+  while (time(&now), now < 1625099485)
+  {
+    delay(1000);
+  }
+
+  char buf[256];
+  strftime(buf, sizeof(buf), "Got time: %Y-%m-%d %H:%M:%S\n", localtime(&now));
+  Serial.printf(buf);
+}
