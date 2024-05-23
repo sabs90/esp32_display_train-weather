@@ -1115,10 +1115,7 @@ bool fetchData() {
       return false;
     }
 
-    // TODO: Process response
-    // Serial.printf("Processing Response...\n");
-    // serializeJsonPretty(busStopDoc, Serial);
-
+    Serial.println("Parsing successful");
     http.end();
     return true;
   } else {
