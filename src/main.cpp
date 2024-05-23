@@ -58,8 +58,9 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
-#include <Fonts/FreeSansBold9pt7b.h>
 #include <GxEPD2_BW.h>
 #include <HTTPClient.h>
 #include <StreamUtils.h>
@@ -99,6 +100,7 @@ SPIClass hspi(HSPI);
 void connectWifi();
 boolean fetchData();
 void showBusStopDepartures();
+time_t parseTimeUtc(const char *utcTimeString);
 void helloWorld();
 void helloFullScreenPartialMode();
 void helloArduino();
@@ -1094,10 +1096,13 @@ bool fetchData() {
 
     // The filter: it contains "true" for each value we want to keep
     JsonDocument filter;
+    filter["locations"][0]["disassembledName"] = true;
     filter["stopEvents"][0]["departureTimePlanned"] = true;
     filter["stopEvents"][0]["departureTimeEstimated"] = true;
     filter["stopEvents"][0]["isRealtimeControlled"] = true;
     filter["stopEvents"][0]["transportation"]["disassembledName"] = true;
+    filter["stopEvents"][0]["transportation"]["origin"]["name"] = true;
+    filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
 
     // https://github.com/espressif/arduino-esp32/issues/4279
     // For some reason, getStream only returns a truncated response.
@@ -1129,32 +1134,67 @@ void showBusStopDepartures() {
   display.setPartialWindow(0, 0, display.width(), display.height());
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
-  display.setFont(&FreeSansBold18pt7b);
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
+    display.setFont(&FreeSansBold12pt7b);
     display.setCursor(0, 0);
     display.println();
-    char buf[256];
+    const char *stopName = busStopDoc["locations"][0]["disassembledName"];
+    display.printf("Departures from %s\n", stopName);
+    // TODO: sort by departure times.
     for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
-      bool isRealtime = stopEvent["isRealtimeControlled"];
-      Serial.printf("Realtime: %d\n", isRealtime);
+      bool isRealtime = stopEvent["isRealtimeControlled"] &&
+                        stopEvent["departureTimeEstimated"];
       const char *busName = stopEvent["transportation"]["disassembledName"];
-      Serial.printf("busName: %s\n", busName);
-      const char *departureTimeString =
-          isRealtime ? stopEvent["departureTimeEstimated"]
-                     : stopEvent["departureTimePlanned"];
-      struct tm departureTime = {0};
-      strptime(departureTimeString, "%Y-%m-%dT%H:%M:%SZ", &departureTime);
 
-      Serial.printf("Departure time: %s\n", departureTimeString);
-      // Convert Departure Time to Local Time string
-      time_t departureTime_t = mktime(&departureTime) - _timezone;
-      strftime(buf, sizeof(buf), "%H:%M", localtime(&departureTime_t));
+      time_t departureTime_t;
+      char realtimeString[16];
+      if (isRealtime) {
+        time_t departureTimeEstimated_t =
+            parseTimeUtc(stopEvent["departureTimeEstimated"]);
+        time_t departureTimePlanned_t =
+            parseTimeUtc(stopEvent["departureTimePlanned"]);
+        departureTime_t = departureTimeEstimated_t;
+        int differenceMinutes =
+            (int)difftime(departureTimeEstimated_t, departureTimePlanned_t) /
+            60;
+        if (differenceMinutes < 0) {
+          snprintf(realtimeString, sizeof(realtimeString), "%d min early",
+                   -differenceMinutes);
+        } else if (differenceMinutes > 0) {
+          snprintf(realtimeString, sizeof(realtimeString), "%d min late",
+                   differenceMinutes);
+        } else {
+          strcpy(realtimeString, "On time");
+        }
+      } else {
+        time_t departureTimePlanned_t =
+            parseTimeUtc(stopEvent["departureTimePlanned"]);
+        departureTime_t = departureTimePlanned_t;
+        strcpy(realtimeString, "Scheduled");
+      }
 
-      display.printf("%s: %s\n", busName, buf);
+      char departureTimeHM[8];
+      strftime(departureTimeHM, sizeof(departureTimeHM), "%H:%M",
+               localtime(&departureTime_t));
+
+      // Find the number of minutes until the next departure
+      double timeUntilNextDeparture = difftime(departureTime_t, now);
+      int nextDepartureMinutes = timeUntilNextDeparture / 60;
+
+      display.printf("%s: %s in %dmin (%s)\n", busName, departureTimeHM,
+                     nextDepartureMinutes, realtimeString);
     }
+    display.setFont(&FreeSans9pt7b);
+    display.printf("Last updated: %s\n", ctime(&now));
   } while (display.nextPage());
+}
+
+time_t parseTimeUtc(const char *utcTimeString) {
+  struct tm tm = {0};
+  strptime(utcTimeString, "%Y-%m-%dT%H:%M:%SZ", &tm);
+  return mktime(&tm) - _timezone;
 }
