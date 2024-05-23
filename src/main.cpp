@@ -100,6 +100,7 @@ SPIClass hspi(HSPI);
 void connectWifi();
 boolean fetchData();
 void showBusStopDepartures();
+void drawStopEvent(JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 void helloWorld();
 void helloFullScreenPartialMode();
@@ -1143,51 +1144,59 @@ void showBusStopDepartures() {
     for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
-      bool isRealtime = stopEvent["isRealtimeControlled"] &&
-                        stopEvent["departureTimeEstimated"];
-      const char *busName = stopEvent["transportation"]["disassembledName"];
-
-      time_t departureTime_t;
-      char realtimeString[16];
-      if (isRealtime) {
-        time_t departureTimeEstimated_t =
-            parseTimeUtc(stopEvent["departureTimeEstimated"]);
-        time_t departureTimePlanned_t =
-            parseTimeUtc(stopEvent["departureTimePlanned"]);
-        departureTime_t = departureTimeEstimated_t;
-        int differenceMinutes =
-            (int)difftime(departureTimeEstimated_t, departureTimePlanned_t) /
-            60;
-        if (differenceMinutes < 0) {
-          snprintf(realtimeString, sizeof(realtimeString), "%d min early",
-                   -differenceMinutes);
-        } else if (differenceMinutes > 0) {
-          snprintf(realtimeString, sizeof(realtimeString), "%d min late",
-                   differenceMinutes);
-        } else {
-          strcpy(realtimeString, "On time");
-        }
-      } else {
-        time_t departureTimePlanned_t =
-            parseTimeUtc(stopEvent["departureTimePlanned"]);
-        departureTime_t = departureTimePlanned_t;
-        strcpy(realtimeString, "Scheduled");
-      }
-
-      char departureTimeHM[8];
-      strftime(departureTimeHM, sizeof(departureTimeHM), "%H:%M",
-               localtime(&departureTime_t));
-
-      // Find the number of minutes until the next departure
-      double timeUntilNextDeparture = difftime(departureTime_t, now);
-      int nextDepartureMinutes = timeUntilNextDeparture / 60;
-
-      display.printf("%s: %s in %dmin (%s)\n", busName, departureTimeHM,
-                     nextDepartureMinutes, realtimeString);
+      drawStopEvent(stopEvent);
     }
     display.setFont(&FreeSans9pt7b);
     display.printf("Last updated: %s\n", ctime(&now));
   } while (display.nextPage());
+}
+
+void drawStopEvent(JsonObject &stopEvent) {
+  const time_t now = time(NULL);
+
+  bool isRealtime =
+      stopEvent["isRealtimeControlled"] && stopEvent["departureTimeEstimated"];
+  const char *busName = stopEvent["transportation"]["disassembledName"];
+
+  time_t departureTime_t;
+  char realtimeString[16];
+  if (isRealtime) {
+    time_t departureTimeEstimated_t =
+        parseTimeUtc(stopEvent["departureTimeEstimated"]);
+    time_t departureTimePlanned_t =
+        parseTimeUtc(stopEvent["departureTimePlanned"]);
+    departureTime_t = departureTimeEstimated_t;
+    int differenceMinutes =
+        (int)difftime(departureTimeEstimated_t, departureTimePlanned_t) / 60;
+    if (differenceMinutes < 0) {
+      snprintf(realtimeString, sizeof(realtimeString), "%d min early",
+               -differenceMinutes);
+    } else if (differenceMinutes > 0) {
+      snprintf(realtimeString, sizeof(realtimeString), "%d min late",
+               differenceMinutes);
+    } else {
+      strcpy(realtimeString, "On time");
+    }
+  } else {
+    time_t departureTimePlanned_t =
+        parseTimeUtc(stopEvent["departureTimePlanned"]);
+    departureTime_t = departureTimePlanned_t;
+    strcpy(realtimeString, "Scheduled");
+  }
+
+  char departureTimeHM[8];
+  strftime(departureTimeHM, sizeof(departureTimeHM), "%H:%M",
+           localtime(&departureTime_t));
+
+  // Find the number of minutes until the next departure
+  double timeUntilNextDeparture = difftime(departureTime_t, now);
+  int nextDepartureMinutes = timeUntilNextDeparture / 60;
+
+  display.printf("%s: %s in %dmin (%s)\n", busName, departureTimeHM,
+                 nextDepartureMinutes, realtimeString);
+
+  display.drawFastHLine(20, display.getCursorY(), display.width() - 40,
+                        GxEPD_BLACK);
 }
 
 time_t parseTimeUtc(const char *utcTimeString) {
