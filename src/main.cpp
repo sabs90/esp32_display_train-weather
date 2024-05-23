@@ -61,6 +61,8 @@
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
+#include <Fonts/FreeSansBold24pt7b.h>
+#include <Fonts/FreeSansBold9pt7b.h>
 #include <GxEPD2_BW.h>
 #include <HTTPClient.h>
 #include <StreamUtils.h>
@@ -100,7 +102,7 @@ SPIClass hspi(HSPI);
 void connectWifi();
 boolean fetchData();
 void showBusStopDepartures();
-void drawStopEvent(JsonObject &stopEvent);
+int drawStopEvent(JsonObject &stopEvent, int y);
 time_t parseTimeUtc(const char *utcTimeString);
 void helloWorld();
 void helloFullScreenPartialMode();
@@ -1139,24 +1141,31 @@ void showBusStopDepartures() {
     display.setCursor(0, 0);
     display.println();
     const char *stopName = busStopDoc["locations"][0]["disassembledName"];
-    display.printf("Departures from %s\n", stopName);
+    display.printf("%s\n", stopName);
+    int y = display.getCursorY();
     // TODO: sort by departure times.
     for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
-      drawStopEvent(stopEvent);
+      y = drawStopEvent(stopEvent, y);
+      y += 12;
+      display.drawFastHLine(20, y, display.width() - 40, GxEPD_BLACK);
+      y += 12;
     }
+    display.setCursor(0, y);
     display.setFont(&FreeSans9pt7b);
+    display.println();
     display.printf("Last updated: %s\n", ctime(&now));
   } while (display.nextPage());
 }
 
-void drawStopEvent(JsonObject &stopEvent) {
+int drawStopEvent(JsonObject &stopEvent, int y) {
   const time_t now = time(NULL);
 
   bool isRealtime =
       stopEvent["isRealtimeControlled"] && stopEvent["departureTimeEstimated"];
   const char *busName = stopEvent["transportation"]["disassembledName"];
+  const char *destination = stopEvent["transportation"]["destination"]["name"];
 
   time_t departureTime_t;
   char realtimeString[16];
@@ -1191,12 +1200,55 @@ void drawStopEvent(JsonObject &stopEvent) {
   // Find the number of minutes until the next departure
   double timeUntilNextDeparture = difftime(departureTime_t, now);
   int nextDepartureMinutes = timeUntilNextDeparture / 60;
+  char nextDepartureMinutesString[8];
+  snprintf(nextDepartureMinutesString, sizeof(nextDepartureMinutesString), "%d",
+           nextDepartureMinutes);
 
-  display.printf("%s: %s in %dmin (%s)\n", busName, departureTimeHM,
-                 nextDepartureMinutes, realtimeString);
+  display.setTextWrap(false);
+  display.setFont(&FreeSansBold24pt7b);
+  int16_t bnbx, bnby;
+  uint16_t bnbw, bnbh;
+  display.getTextBounds(busName, 0, 0, &bnbx, &bnby, &bnbw, &bnbh);
 
-  display.drawFastHLine(20, display.getCursorY(), display.width() - 40,
-                        GxEPD_BLACK);
+  y += bnbh;
+  display.setCursor(0, y);
+  display.print(busName);
+
+  int16_t ndmbx, ndmby;
+  uint16_t ndmbw, ndmbh;
+  display.getTextBounds(nextDepartureMinutesString, 0, 0, &ndmbx, &ndmby,
+                        &ndmbw, &ndmbh);
+
+  const char *minString = "  min";
+  display.setFont(&FreeSansBold9pt7b);
+  int16_t mbx, mby;
+  uint16_t mbw, mbh;
+  display.getTextBounds(minString, 0, 0, &mbx, &mby, &mbw, &mbh);
+
+  display.setCursor(display.width() - mbw, y);
+  display.print(minString);
+  display.setFont(&FreeSansBold24pt7b);
+  display.setCursor(display.width() - mbw - ndmbw, y);
+  display.print(nextDepartureMinutesString);
+
+  y += 8;
+
+  display.setFont(&FreeSans9pt7b);
+  int16_t dbx, dby;
+  uint16_t dbw, dbh;
+  display.getTextBounds(destination, 0, 0, &dbx, &dby, &dbw, &dbh);
+
+  y += dbh;
+  display.setCursor(0, y);
+  display.print(destination);
+
+  int16_t rtbx, rtby;
+  uint16_t rtbw, rtbh;
+  display.getTextBounds(realtimeString, 0, 0, &rtbx, &rtby, &rtbw, &rtbh);
+  display.setCursor(display.width() - rtbw, y);
+  display.print(realtimeString);
+
+  return y;
 }
 
 time_t parseTimeUtc(const char *utcTimeString) {
