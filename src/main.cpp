@@ -58,6 +58,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <GxEPD2_BW.h>
 #include <HTTPClient.h>
@@ -93,8 +94,11 @@ GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(
 SPIClass hspi(HSPI);
 #endif
 
+#define STOP_ID "2035143"
+
 void connectWifi();
 boolean fetchData();
+void showBusStopDepartures();
 void helloWorld();
 void helloFullScreenPartialMode();
 void helloArduino();
@@ -108,11 +112,12 @@ void drawBitmaps();
 void deepSleepTest();
 void showPartialUpdate();
 
+JsonDocument busStopDoc;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("setup");
   connectWifi();
-  fetchData();
 
   // *** special handling for Waveshare ESP32 Driver board *** //
   // ********************************************************* //
@@ -123,20 +128,21 @@ void setup() {
   // *** end of special handling for Waveshare ESP32 Driver board *** //
   // **************************************************************** //
   display.init(115200);
-  // first update should be full refresh
-  helloWorld();
-  delay(1000);
-  // partial refresh mode can be used to full screen,
-  // effective if display panel hasFastPartialUpdate
-  helloFullScreenPartialMode();
-  delay(1000);
-  helloArduino();
-  delay(1000);
-  helloEpaper();
-  delay(1000);
-  showFont("FreeSansBold9pt7b", &FreeSansBold9pt7b);
-  delay(1000);
-  drawBitmaps();
+
+  // // first update should be full refresh
+  // helloWorld();
+  // delay(1000);
+  // // partial refresh mode can be used to full screen,
+  // // effective if display panel hasFastPartialUpdate
+  // helloFullScreenPartialMode();
+  // delay(1000);
+  // helloArduino();
+  // delay(1000);
+  // helloEpaper();
+  // delay(1000);
+  // showFont("FreeSansBold9pt7b", &FreeSansBold9pt7b);
+  // delay(1000);
+  // drawBitmaps();
   // if (display.epd2.hasPartialUpdate)
   // {
   //   showPartialUpdate();
@@ -150,7 +156,11 @@ void setup() {
   Serial.println("setup done");
 }
 
-void loop() {}
+void loop() {
+  fetchData();
+  showBusStopDepartures();
+  delay(30 * 1000);
+}
 
 // note for partial update window and setPartialWindow() method:
 // partial update window size and position is on byte boundary in physical x
@@ -1049,6 +1059,8 @@ void connectWifi() {
     delay(1000);
   }
 
+  setenv("TZ", "AEST-10AEDT,M10.1.0,M4.1.0/3", 1);
+  tzset();
   char buf[256];
   strftime(buf, sizeof(buf), "Got time: %Y-%m-%d %H:%M:%S\n", localtime(&now));
   Serial.printf(buf);
@@ -1066,7 +1078,8 @@ bool fetchData() {
   http.begin(
       "https://api.transport.nsw.gov.au/v1/tp/"
       "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%3A4326&mode="
-      "direct&type_dm=stop&name_dm=2035144&departureMonitorMacro=true&TfNSWDM="
+      "direct&type_dm=stop&name_dm=" STOP_ID
+      "&departureMonitorMacro=true&TfNSWDM="
       "true&version=10.2.1.42",
       (const char *)NULL);
 
@@ -1086,12 +1099,10 @@ bool fetchData() {
     filter["stopEvents"][0]["isRealtimeControlled"] = true;
     filter["stopEvents"][0]["transportation"]["disassembledName"] = true;
 
-    // Parse response
-    JsonDocument doc;
     // https://github.com/espressif/arduino-esp32/issues/4279
     // For some reason, getStream only returns a truncated response.
     DeserializationError err = deserializeJson(
-        doc, http.getString(), DeserializationOption::Filter(filter));
+        busStopDoc, http.getString(), DeserializationOption::Filter(filter));
 
     if (err) {
       http.end();
@@ -1100,8 +1111,8 @@ bool fetchData() {
     }
 
     // TODO: Process response
-    Serial.printf("Processing Response...\n");
-    serializeJsonPretty(doc, Serial);
+    // Serial.printf("Processing Response...\n");
+    // serializeJsonPretty(busStopDoc, Serial);
 
     http.end();
     return true;
@@ -1111,4 +1122,39 @@ bool fetchData() {
     http.end();
     return false;
   }
+}
+
+void showBusStopDepartures() {
+  const time_t now = time(NULL);
+  display.setPartialWindow(0, 0, display.width(), display.height());
+  display.setRotation(1);
+  display.setTextColor(GxEPD_BLACK);
+  display.setFont(&FreeSansBold18pt7b);
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(0, 0);
+    display.println();
+    char buf[256];
+    for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
+      JsonObject stopEvent = busStopDoc["stopEvents"][i];
+      serializeJsonPretty(stopEvent, Serial);
+      bool isRealtime = stopEvent["isRealtimeControlled"];
+      Serial.printf("Realtime: %d\n", isRealtime);
+      const char *busName = stopEvent["transportation"]["disassembledName"];
+      Serial.printf("busName: %s\n", busName);
+      const char *departureTimeString =
+          isRealtime ? stopEvent["departureTimeEstimated"]
+                     : stopEvent["departureTimePlanned"];
+      struct tm departureTime = {0};
+      strptime(departureTimeString, "%Y-%m-%dT%H:%M:%SZ", &departureTime);
+
+      Serial.printf("Departure time: %s\n", departureTimeString);
+      // Convert Departure Time to Local Time string
+      time_t departureTime_t = mktime(&departureTime) - _timezone;
+      strftime(buf, sizeof(buf), "%H:%M", localtime(&departureTime_t));
+
+      display.printf("%s: %s\n", busName, buf);
+    }
+  } while (display.nextPage());
 }
