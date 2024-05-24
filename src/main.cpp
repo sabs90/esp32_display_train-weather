@@ -71,6 +71,7 @@
 #include <lwip/apps/sntp.h>
 #include <time.h>
 
+#include "icons.h"
 #include "secrets.h"
 
 // copy the constructor from GxEPD2_display_selection.h of GxEPD_Example to here
@@ -1257,6 +1258,12 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   display.getTextBounds(departureTimeHM, 0, 0, &rtbx, &rtby, &rtbw, &rtbh);
   display.setCursor(display.width() - xMargin - rtbw, y);
   display.print(departureTimeHM);
+
+  if (isRealtime) {
+    display.drawInvertedBitmap(display.width() - xMargin - rtbw - 8 - 16,
+                               y - dbh, epd_bitmap_rssfeed, 16, 16,
+                               GxEPD_BLACK);
+  }
 
   return y;
 }
