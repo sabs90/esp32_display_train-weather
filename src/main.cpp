@@ -57,6 +57,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <Fonts/FreeMonoBold24pt7b.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -102,8 +103,10 @@ SPIClass hspi(HSPI);
 void connectWifi();
 boolean fetchData();
 void showBusStopDepartures();
-int drawStopEvent(JsonObject &stopEvent, int y);
+int drawStopEvent(JsonObject &stopEvent, int y, int xMargin = 20);
 time_t parseTimeUtc(const char *utcTimeString);
+
+// Example methods (to be deleted)
 void helloWorld();
 void helloFullScreenPartialMode();
 void helloArduino();
@@ -170,8 +173,8 @@ void loop() {
 // note for partial update window and setPartialWindow() method:
 // partial update window size and position is on byte boundary in physical x
 // direction the size is increased in setPartialWindow() if x or w are not
-// multiple of 8 for even rotation, y or h for odd rotation see also comment in
-// GxEPD2_BW.h, GxEPD2_3C.h or GxEPD2_GFX.h for method setPartialWindow()
+// multiple of 8 for even rotation, y or h for odd rotation see also comment
+// in GxEPD2_BW.h, GxEPD2_3C.h or GxEPD2_GFX.h for method setPartialWindow()
 
 const char HelloWorld[] = "Hello World Amorrisx!";
 const char HelloArduino[] = "Hello Arduino!";
@@ -224,8 +227,8 @@ void helloWorldForDummies() {
   // full window mode is the initial mode, set it anyway
   display.setFullWindow();
   // here we use paged drawing, even if the processor has enough RAM for full
-  // buffer so this can be used with any supported processor board. the cost in
-  // code overhead and execution time penalty is marginal tell the graphics
+  // buffer so this can be used with any supported processor board. the cost
+  // in code overhead and execution time penalty is marginal tell the graphics
   // class to use paged drawing mode
   display.firstPage();
   do {
@@ -241,14 +244,14 @@ void helloWorldForDummies() {
     // end of part executed multiple times
   }
   // tell the graphics class to transfer the buffer content (page) to the
-  // controller buffer the graphics class will command the controller to refresh
-  // to the screen when the last page has been transferred returns true if more
-  // pages need be drawn and transferred returns false if the last page has been
-  // transferred and the screen refreshed for panels without fast partial update
-  // returns false for panels with fast partial update when the controller
-  // buffer has been written once more, to make the differential buffers equal
-  // (for full buffered with fast partial update the (full) buffer is just
-  // transferred again, and false returned)
+  // controller buffer the graphics class will command the controller to
+  // refresh to the screen when the last page has been transferred returns
+  // true if more pages need be drawn and transferred returns false if the
+  // last page has been transferred and the screen refreshed for panels
+  // without fast partial update returns false for panels with fast partial
+  // update when the controller buffer has been written once more, to make the
+  // differential buffers equal (for full buffered with fast partial update
+  // the (full) buffer is just transferred again, and false returned)
   while (display.nextPage());
   // Serial.println("helloWorld done");
 }
@@ -312,7 +315,8 @@ void helloArduino() {
   // height might be different
   display.getTextBounds(HelloArduino, 0, 0, &tbx, &tby, &tbw, &tbh);
   uint16_t y = ((display.height() / 4) - tbh / 2) - tby;  // y is base line!
-  // make the window big enough to cover (overwrite) descenders of previous text
+  // make the window big enough to cover (overwrite) descenders of previous
+  // text
   uint16_t wh = FreeMonoBold9pt7b.yAdvance;
   uint16_t wy = (display.height() / 4) - wh / 2;
   display.setPartialWindow(0, wy, display.width(), wh);
@@ -340,7 +344,8 @@ void helloEpaper() {
   // height might be different
   display.getTextBounds(HelloEpaper, 0, 0, &tbx, &tby, &tbw, &tbh);
   uint16_t y = (display.height() * 3 / 4) + tbh / 2;  // y is base line!
-  // make the window big enough to cover (overwrite) descenders of previous text
+  // make the window big enough to cover (overwrite) descenders of previous
+  // text
   uint16_t wh = FreeMonoBold9pt7b.yAdvance;
   uint16_t wy = (display.height() * 3 / 4) - wh / 2;
   display.setPartialWindow(0, wy, display.width(), wh);
@@ -479,10 +484,10 @@ void drawFont(const char name[], const GFXfont *f) {
 // note for partial update window and setPartialWindow() method:
 // partial update window size and position is on byte boundary in physical x
 // direction the size is increased in setPartialWindow() if x or w are not
-// multiple of 8 for even rotation, y or h for odd rotation see also comment in
-// GxEPD2_BW.h, GxEPD2_3C.h or GxEPD2_GFX.h for method setPartialWindow()
-// showPartialUpdate() purposely uses values that are not multiples of 8 to test
-// this
+// multiple of 8 for even rotation, y or h for odd rotation see also comment
+// in GxEPD2_BW.h, GxEPD2_3C.h or GxEPD2_GFX.h for method setPartialWindow()
+// showPartialUpdate() purposely uses values that are not multiples of 8 to
+// test this
 
 void showPartialUpdate() {
   // some useful background
@@ -636,8 +641,8 @@ void drawBitmaps200x200() {
       display.writeImage(bitmaps[i], x, y, 200, 200, false, mirror_y, true);
       display.refresh(true);
       if (display.epd2.hasFastPartialUpdate) {
-        // for differential update: set previous buffer equal to current buffer
-        // in controller
+        // for differential update: set previous buffer equal to current
+        // buffer in controller
         display.epd2.writeScreenBufferAgain();  // use default for white
         display.epd2.writeImageAgain(bitmaps[i], x, y, 200, 200, false,
                                      mirror_y, true);
@@ -822,8 +827,8 @@ void drawBitmaps800x600() {
     //    delay(2000);
     //    Serial.print("sizeof(WS_acaa_1024x731) is ");
     //    Serial.println(sizeof(WS_acaa_1024x731));
-    //    display.drawNative(WS_acaa_1024x731, 0, 0, 0, 1024, 731, false, false,
-    //    true); delay(2000);
+    //    display.drawNative(WS_acaa_1024x731, 0, 0, 0, 1024, 731, false,
+    //    false, true); delay(2000);
   }
 #endif
 }
@@ -1052,8 +1057,8 @@ void connectWifi() {
   sntp_setoperatingmode(SNTP_OPMODE_POLL);
 
   char server[] =
-      "time.nist.gov";  // sntp_setservername takes a non-const char*, so use a
-                        // non-const variable to avoid warning
+      "time.nist.gov";  // sntp_setservername takes a non-const char*, so use
+                        // a non-const variable to avoid warning
   sntp_setservername(0, server);
   sntp_init();
 
@@ -1082,7 +1087,8 @@ bool fetchData() {
   http.setAuthorization(TFNSW_API_KEY);
   http.begin(
       "https://api.transport.nsw.gov.au/v1/tp/"
-      "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%3A4326&mode="
+      "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%3A4326&"
+      "mode="
       "direct&type_dm=stop&name_dm=" STOP_ID
       "&departureMonitorMacro=true&TfNSWDM="
       "true&version=10.2.1.42",
@@ -1131,15 +1137,17 @@ bool fetchData() {
 
 void showBusStopDepartures() {
   const time_t now = time(NULL);
+  const int16_t xMargin = 16;
   display.setPartialWindow(0, 0, display.width(), display.height());
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    display.setFont(&FreeSansBold12pt7b);
     display.setCursor(0, 0);
+    display.setFont(&FreeSansBold12pt7b);
     display.println();
+    display.setCursor(xMargin, display.getCursorY());
     const char *stopName = busStopDoc["locations"][0]["disassembledName"];
     display.printf("%s\n", stopName);
     int y = display.getCursorY();
@@ -1147,19 +1155,21 @@ void showBusStopDepartures() {
     for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
-      y = drawStopEvent(stopEvent, y);
+      y = drawStopEvent(stopEvent, y, xMargin);
       y += 12;
-      display.drawFastHLine(20, y, display.width() - 40, GxEPD_BLACK);
+      display.drawFastHLine(8 + xMargin, y,
+                            display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
       y += 12;
     }
-    display.setCursor(0, y);
+    display.setCursor(xMargin, y);
     display.setFont(&FreeSans9pt7b);
     display.println();
+    display.setCursor(xMargin, display.getCursorY());
     display.printf("Last updated: %s\n", ctime(&now));
   } while (display.nextPage());
 }
 
-int drawStopEvent(JsonObject &stopEvent, int y) {
+int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   const time_t now = time(NULL);
 
   bool isRealtime =
@@ -1211,7 +1221,7 @@ int drawStopEvent(JsonObject &stopEvent, int y) {
   display.getTextBounds(busName, 0, 0, &bnbx, &bnby, &bnbw, &bnbh);
 
   y += bnbh;
-  display.setCursor(0, y);
+  display.setCursor(xMargin, y);
   display.print(busName);
 
   int16_t ndmbx, ndmby;
@@ -1225,10 +1235,10 @@ int drawStopEvent(JsonObject &stopEvent, int y) {
   uint16_t mbw, mbh;
   display.getTextBounds(minString, 0, 0, &mbx, &mby, &mbw, &mbh);
 
-  display.setCursor(display.width() - mbw, y);
+  display.setCursor(display.width() - xMargin - mbw, y);
   display.print(minString);
   display.setFont(&FreeSansBold24pt7b);
-  display.setCursor(display.width() - mbw - ndmbw, y);
+  display.setCursor(display.width() - xMargin - mbw - ndmbw, y);
   display.print(nextDepartureMinutesString);
 
   y += 8;
@@ -1239,14 +1249,14 @@ int drawStopEvent(JsonObject &stopEvent, int y) {
   display.getTextBounds(destination, 0, 0, &dbx, &dby, &dbw, &dbh);
 
   y += dbh;
-  display.setCursor(0, y);
+  display.setCursor(xMargin, y);
   display.print(destination);
 
   int16_t rtbx, rtby;
   uint16_t rtbw, rtbh;
-  display.getTextBounds(realtimeString, 0, 0, &rtbx, &rtby, &rtbw, &rtbh);
-  display.setCursor(display.width() - rtbw, y);
-  display.print(realtimeString);
+  display.getTextBounds(departureTimeHM, 0, 0, &rtbx, &rtby, &rtbw, &rtbh);
+  display.setCursor(display.width() - xMargin - rtbw, y);
+  display.print(departureTimeHM);
 
   return y;
 }
