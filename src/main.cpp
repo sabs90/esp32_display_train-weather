@@ -1145,8 +1145,8 @@ void showBusStopDepartures() {
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
-    display.setCursor(0, 0);
     display.setFont(&FreeSansBold12pt7b);
+    display.setCursor(0, 0);
     display.println();
     display.setCursor(xMargin, display.getCursorY());
     const char *stopName = busStopDoc["locations"][0]["disassembledName"];
