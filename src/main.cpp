@@ -215,39 +215,16 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   const char *busName = stopEvent["transportation"]["disassembledName"];
   const char *destination = stopEvent["transportation"]["destination"]["name"];
 
-  time_t departureTime_t;
-  char realtimeString[16];
-  if (isRealtime) {
-    time_t departureTimeEstimated_t =
-        parseTimeUtc(stopEvent["departureTimeEstimated"]);
-    time_t departureTimePlanned_t =
-        parseTimeUtc(stopEvent["departureTimePlanned"]);
-    departureTime_t = departureTimeEstimated_t;
-    int differenceMinutes =
-        (int)difftime(departureTimeEstimated_t, departureTimePlanned_t) / 60;
-    if (differenceMinutes < 0) {
-      snprintf(realtimeString, sizeof(realtimeString), "%d min early",
-               -differenceMinutes);
-    } else if (differenceMinutes > 0) {
-      snprintf(realtimeString, sizeof(realtimeString), "%d min late",
-               differenceMinutes);
-    } else {
-      strcpy(realtimeString, "On time");
-    }
-  } else {
-    time_t departureTimePlanned_t =
-        parseTimeUtc(stopEvent["departureTimePlanned"]);
-    departureTime_t = departureTimePlanned_t;
-    strcpy(realtimeString, "Scheduled");
-  }
+  time_t departureTime_t =
+      parseTimeUtc(stopEvent[isRealtime ? "departureTimeEstimated"
+                                        : "departureTimePlanned"]);
 
   char departureTimeHM[8];
   strftime(departureTimeHM, sizeof(departureTimeHM), "%H:%M",
            localtime(&departureTime_t));
 
   // Find the number of minutes until the next departure
-  double timeUntilNextDeparture = difftime(departureTime_t, now);
-  int nextDepartureMinutes = timeUntilNextDeparture / 60;
+  int nextDepartureMinutes = ((int)difftime(departureTime_t, now)) / 60;
   char nextDepartureMinutesString[8];
   snprintf(nextDepartureMinutesString, sizeof(nextDepartureMinutesString), "%d",
            nextDepartureMinutes);
