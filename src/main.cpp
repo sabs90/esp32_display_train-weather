@@ -194,10 +194,10 @@ void showBusStopDepartures() {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
       y = drawStopEvent(stopEvent, y, xMargin);
-      y += 12;
+      y += 8;
       display.drawFastHLine(8 + xMargin, y,
                             display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
-      y += 12;
+      y += 8;
     }
     display.setCursor(xMargin, y);
     display.setFont(&FreeSans9pt7b);
@@ -231,11 +231,11 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
 
   display.setTextWrap(false);
   display.setFont(&FreeSansBold24pt7b);
+  y += 36;
+
   int16_t bnbx, bnby;
   uint16_t bnbw, bnbh;
   display.getTextBounds(busName, 0, 0, &bnbx, &bnby, &bnbw, &bnbh);
-
-  y += bnbh;
   display.setCursor(xMargin, y);
   display.print(busName);
 
@@ -256,14 +256,14 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   display.setCursor(display.width() - xMargin - mbw - ndmbw, y);
   display.print(nextDepartureMinutesString);
 
-  y += 8;
+  y += 12;
 
   display.setFont(&FreeSans9pt7b);
+  y += 14;
+
   int16_t dbx, dby;
   uint16_t dbw, dbh;
   display.getTextBounds(destination, 0, 0, &dbx, &dby, &dbw, &dbh);
-
-  y += dbh;
   display.setCursor(xMargin, y);
   display.print(destination);
 
@@ -275,9 +275,10 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
 
   if (isRealtime) {
     display.drawInvertedBitmap(display.width() - xMargin - rtbw - 8 - 16,
-                               y - dbh, epd_bitmap_rssfeed, 16, 16,
-                               GxEPD_BLACK);
+                               y - 14, epd_bitmap_rssfeed, 16, 16, GxEPD_BLACK);
   }
+
+  y += 4;
 
   return y;
 }
