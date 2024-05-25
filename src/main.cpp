@@ -195,11 +195,10 @@ void showBusStopDepartures() {
     int y = display.getCursorY();
     std::vector<JsonObject> stopEvents = getSortedStopEvents();
     for (int i = 0; i < stopEvents.size() && i < 8; i++) {
-      JsonObject stopEvent = busStopDoc["stopEvents"][i];
+      JsonObject stopEvent = stopEvents[i];
       if (getDepartureTime(stopEvent) > now + 60 * 60) {
         break;
       }
-      serializeJsonPretty(stopEvent, Serial);
       y = drawStopEvent(stopEvent, y, xMargin);
       y += 8;
       display.drawFastHLine(8 + xMargin, y,
@@ -220,16 +219,14 @@ void showBusStopDepartures() {
 
 std::vector<JsonObject> getSortedStopEvents() {
   std::vector<JsonObject> stopEvents;
-  // 16 is a magic number that avoids crashes (presumably due to running out of
-  // memory?)
-  for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 16; i++) {
+  for (int i = 0; i < busStopDoc["stopEvents"].size(); i++) {
     JsonObject stopEvent = busStopDoc["stopEvents"][i];
     stopEvents.push_back(stopEvent);
   }
 
   std::sort(stopEvents.begin(), stopEvents.end(),
             [](const JsonObject &a, const JsonObject &b) {
-              return getDepartureTime(a) - getDepartureTime(b);
+              return getDepartureTime(a) < getDepartureTime(b);
             });
   return stopEvents;
 }
