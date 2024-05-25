@@ -190,7 +190,7 @@ void showBusStopDepartures() {
     display.printf("%s\n", stopName);
     int y = display.getCursorY();
     // TODO: sort by departure times.
-    for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 5; i++) {
+    for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 8; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
       serializeJsonPretty(stopEvent, Serial);
       y = drawStopEvent(stopEvent, y, xMargin);
@@ -199,11 +199,15 @@ void showBusStopDepartures() {
                             display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
       y += 8;
     }
-    display.setCursor(xMargin, y);
     display.setFont(&FreeSans9pt7b);
-    display.println();
-    display.setCursor(xMargin, display.getCursorY());
-    display.printf("Last updated: %s\n", ctime(&now));
+    char lastUpdatedTimeString[48];
+    strftime(lastUpdatedTimeString, sizeof(lastUpdatedTimeString),
+             "Last Updated: %d %b %H:%M", localtime(&now));
+    int16_t lux, luy;
+    uint16_t luw, luh;
+    display.getTextBounds(lastUpdatedTimeString, 0, 0, &lux, &luy, &luw, &luh);
+    display.setCursor(display.width() - xMargin - luw, display.height() - 18);
+    display.print(lastUpdatedTimeString);
   } while (display.nextPage());
 }
 
