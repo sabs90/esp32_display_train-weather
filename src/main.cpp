@@ -47,7 +47,9 @@ SPIClass hspi(HSPI);
 void connectWifi();
 boolean fetchData();
 void showBusStopDepartures();
-int drawStopEvent(JsonObject &stopEvent, int y, int xMargin = 20);
+std::vector<JsonObject> getSortedStopEvents();
+int drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
+time_t getDepartureTime(const JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 
 JsonDocument busStopDoc;
@@ -188,10 +190,15 @@ void showBusStopDepartures() {
     display.setCursor(xMargin, display.getCursorY());
     const char *stopName = busStopDoc["locations"][0]["disassembledName"];
     display.printf("%s\n", stopName);
+
+    // TODO: choose y in a better way.
     int y = display.getCursorY();
-    // TODO: sort by departure times.
-    for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 8; i++) {
+    std::vector<JsonObject> stopEvents = getSortedStopEvents();
+    for (int i = 0; i < stopEvents.size() && i < 8; i++) {
       JsonObject stopEvent = busStopDoc["stopEvents"][i];
+      if (getDepartureTime(stopEvent) > now + 60 * 60) {
+        break;
+      }
       serializeJsonPretty(stopEvent, Serial);
       y = drawStopEvent(stopEvent, y, xMargin);
       y += 8;
@@ -211,7 +218,23 @@ void showBusStopDepartures() {
   } while (display.nextPage());
 }
 
-int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
+std::vector<JsonObject> getSortedStopEvents() {
+  std::vector<JsonObject> stopEvents;
+  // 16 is a magic number that avoids crashes (presumably due to running out of
+  // memory?)
+  for (int i = 0; i < busStopDoc["stopEvents"].size() && i < 16; i++) {
+    JsonObject stopEvent = busStopDoc["stopEvents"][i];
+    stopEvents.push_back(stopEvent);
+  }
+
+  std::sort(stopEvents.begin(), stopEvents.end(),
+            [](const JsonObject &a, const JsonObject &b) {
+              return getDepartureTime(a) - getDepartureTime(b);
+            });
+  return stopEvents;
+}
+
+int drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
   const time_t now = time(NULL);
 
   bool isRealtime =
@@ -219,9 +242,7 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   const char *busName = stopEvent["transportation"]["disassembledName"];
   const char *destination = stopEvent["transportation"]["destination"]["name"];
 
-  time_t departureTime_t =
-      parseTimeUtc(stopEvent[isRealtime ? "departureTimeEstimated"
-                                        : "departureTimePlanned"]);
+  time_t departureTime_t = getDepartureTime(stopEvent);
 
   char departureTimeHM[8];
   strftime(departureTimeHM, sizeof(departureTimeHM), "%H:%M",
@@ -285,6 +306,15 @@ int drawStopEvent(JsonObject &stopEvent, int y, int xMargin) {
   y += 4;
 
   return y;
+}
+
+time_t getDepartureTime(const JsonObject &stopEvent) {
+  bool isRealtime =
+      stopEvent["isRealtimeControlled"] && stopEvent["departureTimeEstimated"];
+
+  const char *departureTimeString =
+      stopEvent[isRealtime ? "departureTimeEstimated" : "departureTimePlanned"];
+  return parseTimeUtc(departureTimeString);
 }
 
 time_t parseTimeUtc(const char *utcTimeString) {
