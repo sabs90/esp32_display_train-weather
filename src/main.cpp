@@ -185,14 +185,14 @@ void showBusStopDepartures() {
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(0, 0);
-    display.println();
-    display.setCursor(xMargin, display.getCursorY());
+    display.drawInvertedBitmap(xMargin, 0, epd_bitmap_busmode, 48, 48,
+                               GxEPD_BLACK);
+    display.setCursor(xMargin + 48 + 8, 32);
     const char *stopName = busStopDoc["locations"][0]["disassembledName"];
     display.printf("%s\n", stopName);
 
     // TODO: choose y in a better way.
-    int y = display.getCursorY();
+    int y = 48 + 12;
     std::vector<JsonObject> stopEvents = getSortedStopEvents();
     for (int i = 0; i < stopEvents.size() && i < 8; i++) {
       JsonObject stopEvent = stopEvents[i];
