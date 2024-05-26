@@ -154,7 +154,6 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
   http.begin(url, (const char *)NULL);
 
   // Send the request as a GET
-  Serial.println("Sending tfnsw request");
   int http_code = http.GET();
 
   Serial.printf("Finished request in %lu millis.\n", millis() - start);
