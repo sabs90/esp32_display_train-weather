@@ -46,6 +46,7 @@ SPIClass hspi(HSPI);
 
 void connectWifi();
 boolean fetchData();
+void render();
 void showBusStopDepartures();
 std::vector<JsonObject> getSortedStopEvents();
 int drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
@@ -77,7 +78,7 @@ void loop() {
   fetchData();
 
   // Render
-  showBusStopDepartures();
+  render();
 
   // Loop
   delay(30 * 1000);
@@ -175,9 +176,7 @@ bool fetchData() {
   }
 }
 
-void showBusStopDepartures() {
-  const time_t now = time(NULL);
-  const int16_t xMargin = 16;
+void render() {
   display.setPartialWindow(0, 0, display.width(), display.height());
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
@@ -185,39 +184,45 @@ void showBusStopDepartures() {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    display.fillRoundRect(8, 0, display.width() - 2 * 8, 56, 4, GxEPD_BLACK);
-    display.drawInvertedBitmap(xMargin, 4, epd_bitmap_busmode, 48, 48,
-                               GxEPD_WHITE);
-    display.setTextColor(GxEPD_WHITE);
-    display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(xMargin + 48 + 8, 32 + 4);
-    const char *stopName = busStopDoc["locations"][0]["disassembledName"];
-    display.print(stopName);
-    display.setTextColor(GxEPD_BLACK);
-
-    int y = 56 + 12;
-    std::vector<JsonObject> stopEvents = getSortedStopEvents();
-    for (int i = 0; i < stopEvents.size() && i < 8; i++) {
-      JsonObject stopEvent = stopEvents[i];
-      if (getDepartureTime(stopEvent) > now + 60 * 60) {
-        break;
-      }
-      y = drawStopEvent(stopEvent, y, xMargin);
-      y += 8;
-      display.drawFastHLine(8 + xMargin, y,
-                            display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
-      y += 8;
-    }
-    display.setFont(&FreeSans9pt7b);
-    char lastUpdatedTimeString[48];
-    strftime(lastUpdatedTimeString, sizeof(lastUpdatedTimeString),
-             "Last Updated: %d %b %H:%M", localtime(&now));
-    int16_t lux, luy;
-    uint16_t luw, luh;
-    display.getTextBounds(lastUpdatedTimeString, 0, 0, &lux, &luy, &luw, &luh);
-    display.setCursor(display.width() - xMargin - luw, display.height() - 18);
-    display.print(lastUpdatedTimeString);
+    showBusStopDepartures();
   } while (display.nextPage());
+}
+
+void showBusStopDepartures() {
+  const time_t now = time(NULL);
+  const int16_t xMargin = 16;
+  display.fillRoundRect(8, 0, display.width() - 2 * 8, 56, 4, GxEPD_BLACK);
+  display.drawInvertedBitmap(xMargin, 4, epd_bitmap_busmode, 48, 48,
+                             GxEPD_WHITE);
+  display.setTextColor(GxEPD_WHITE);
+  display.setFont(&FreeSansBold12pt7b);
+  display.setCursor(xMargin + 48 + 8, 32 + 4);
+  const char *stopName = busStopDoc["locations"][0]["disassembledName"];
+  display.print(stopName);
+  display.setTextColor(GxEPD_BLACK);
+
+  int y = 56 + 12;
+  std::vector<JsonObject> stopEvents = getSortedStopEvents();
+  for (int i = 0; i < stopEvents.size() && i < 8; i++) {
+    JsonObject stopEvent = stopEvents[i];
+    if (getDepartureTime(stopEvent) > now + 60 * 60) {
+      break;
+    }
+    y = drawStopEvent(stopEvent, y, xMargin);
+    y += 8;
+    display.drawFastHLine(8 + xMargin, y, display.width() - 2 * 8 - 2 * xMargin,
+                          GxEPD_BLACK);
+    y += 8;
+  }
+  display.setFont(&FreeSans9pt7b);
+  char lastUpdatedTimeString[48];
+  strftime(lastUpdatedTimeString, sizeof(lastUpdatedTimeString),
+           "Last Updated: %d %b %H:%M", localtime(&now));
+  int16_t lux, luy;
+  uint16_t luw, luh;
+  display.getTextBounds(lastUpdatedTimeString, 0, 0, &lux, &luy, &luw, &luh);
+  display.setCursor(display.width() - xMargin - luw, display.height() - 18);
+  display.print(lastUpdatedTimeString);
 }
 
 std::vector<JsonObject> getSortedStopEvents() {
