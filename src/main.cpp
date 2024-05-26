@@ -42,10 +42,9 @@ GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(
 SPIClass hspi(HSPI);
 #endif
 
-#define STOP_ID "2035143"
-
 void connectWifi();
-boolean fetchData();
+bool fetchData();
+bool fetchForStopId(const char *stopId, JsonDocument &stopDoc);
 void render();
 void showBusStopDepartures();
 int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
@@ -55,7 +54,9 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
 time_t getDepartureTime(const JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 
-JsonDocument busStopDoc;
+const char *stopIds[] = {"2035144", "2035159"};
+
+std::vector<JsonDocument> stopDocs;
 
 void setup() {
   Serial.begin(115200);
@@ -120,6 +121,18 @@ void connectWifi() {
 }
 
 bool fetchData() {
+  stopDocs.clear();
+  for (const char *stopId : stopIds) {
+    JsonDocument stopDoc;
+    if (!fetchForStopId(stopId, stopDoc)) {
+      return false;
+    }
+    stopDocs.push_back(stopDoc);
+  }
+  return true;
+}
+
+bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
   uint32_t start = millis();
   WiFiClientSecure client;
   HTTPClient http;
@@ -128,14 +141,17 @@ bool fetchData() {
   http.useHTTP10(true);
   http.setAuthorizationType("apiKey");
   http.setAuthorization(TFNSW_API_KEY);
-  http.begin(
+  char url[256];
+  snprintf(
+      url, sizeof(url),
       "https://api.transport.nsw.gov.au/v1/tp/"
-      "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%3A4326&"
+      "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%%3A4326&"
       "mode="
-      "direct&type_dm=stop&name_dm=" STOP_ID
+      "direct&type_dm=stop&name_dm=%s"
       "&departureMonitorMacro=true&TfNSWDM="
       "true&version=10.2.1.42",
-      (const char *)NULL);
+      stopId);
+  http.begin(url, (const char *)NULL);
 
   // Send the request as a GET
   Serial.println("Sending tfnsw request");
@@ -159,7 +175,7 @@ bool fetchData() {
     // https://github.com/espressif/arduino-esp32/issues/4279
     // For some reason, getStream only returns a truncated response.
     DeserializationError err = deserializeJson(
-        busStopDoc, http.getString(), DeserializationOption::Filter(filter));
+        stopDoc, http.getString(), DeserializationOption::Filter(filter));
 
     if (err) {
       http.end();
@@ -194,17 +210,24 @@ void showBusStopDepartures() {
   const time_t now = time(NULL);
   const int16_t xMargin = 16;
 
-  showDeparturesForStop(busStopDoc, xMargin, 0, display.height() - 32);
-
+  // Show last updated time at the bottom
   display.setFont(&FreeSans9pt7b);
   char lastUpdatedTimeString[48];
   strftime(lastUpdatedTimeString, sizeof(lastUpdatedTimeString),
            "Last Updated: %d %b %H:%M", localtime(&now));
   int16_t lux, luy;
   uint16_t luw, luh;
-  display.getTextBounds(lastUpdatedTimeString, 0, 0, &lux, &luy, &luw, &luh);
-  display.setCursor(display.width() - xMargin - luw, display.height() - 8);
+  display.getTextBounds(lastUpdatedTimeString, 0, display.height() - 4, &lux,
+                        &luy, &luw, &luh);
+  display.setCursor((display.width() - luw) / 2, display.height() - 4);
   display.print(lastUpdatedTimeString);
+
+  int numStops = stopDocs.size();
+  int16_t heightPerStop = (luy - 4) / numStops;
+  int16_t y = 0;
+  for (JsonDocument stopDoc : stopDocs) {
+    y += showDeparturesForStop(stopDoc, xMargin, y, y + heightPerStop);
+  }
 }
 
 int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
@@ -214,12 +237,13 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
   int16_t y = top;
 
   // Bus Stop Name
-  display.fillRoundRect(8, 0, display.width() - 2 * 8, 56, 4, GxEPD_BLACK);
-  display.drawInvertedBitmap(xMargin, 4, epd_bitmap_busmode, 48, 48,
+  display.fillRoundRect(xMargin - 8, y, display.width() - 2 * (xMargin - 8), 56,
+                        4, GxEPD_BLACK);
+  display.drawInvertedBitmap(xMargin, y + 4, epd_bitmap_busmode, 48, 48,
                              GxEPD_WHITE);
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(xMargin + 48 + 8, 32 + 4);
+  display.setCursor(xMargin + 48 + 8, y + 32 + 4);
   const char *stopName = stopDoc["locations"][0]["disassembledName"];
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
@@ -229,7 +253,7 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
   int16_t stopEventHeight = 0;
   std::vector<JsonObject> stopEvents =
       getSortedStopEvents(stopDoc["stopEvents"]);
-  for (int i = 0; i < stopEvents.size() && i < 8; i++) {
+  for (int i = 0; i < stopEvents.size(); i++) {
     JsonObject stopEvent = stopEvents[i];
 
     // Only show departures within the next hour
@@ -238,18 +262,22 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
     }
 
     // Don't render if we are going to exceed the allocated height
-    if (y + stopEventHeight > maxY) {
+    if (y + stopEventHeight > maxY - 8) {
       break;
+    }
+
+    // If not the first entry, draw a divider line
+    if (stopEventHeight) {
+      display.drawFastHLine(8 + xMargin, y,
+                            display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
+      y += 8;
     }
 
     int16_t oldY = y;
     y = drawStopEvent(stopEvent, y, xMargin);
     stopEventHeight = y - oldY;
-    y += 8;
-    display.drawFastHLine(8 + xMargin, y, display.width() - 2 * 8 - 2 * xMargin,
-                          GxEPD_BLACK);
-    y += 8;
   }
+  y += 8;
   return y;
 }
 
@@ -335,7 +363,7 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
                                y - 14, epd_bitmap_rssfeed, 16, 16, GxEPD_BLACK);
   }
 
-  y += 4;
+  y += 12;
 
   return y;
 }
