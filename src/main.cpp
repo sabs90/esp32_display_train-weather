@@ -54,6 +54,8 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
 time_t getDepartureTime(const JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 
+int partialRefreshCount = 0;
+
 const char *stopIds[] = {"2035144", "2035159"};
 
 std::vector<JsonDocument> stopDocs;
@@ -83,7 +85,7 @@ void loop() {
   // Render
   render();
 
-  // Loop
+  // Delay until next run
   delay(30 * 1000);
 }
 
@@ -194,7 +196,13 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
 }
 
 void render() {
-  display.setPartialWindow(0, 0, display.width(), display.height());
+  if (partialRefreshCount > 20) {
+    display.setFullWindow();
+    partialRefreshCount = 0;
+  } else {
+    display.setPartialWindow(0, 0, display.width(), display.height());
+    partialRefreshCount++;
+  }
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
   display.firstPage();
