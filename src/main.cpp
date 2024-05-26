@@ -48,8 +48,10 @@ void connectWifi();
 boolean fetchData();
 void render();
 void showBusStopDepartures();
-std::vector<JsonObject> getSortedStopEvents();
-int drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
+int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
+                              int16_t top, int16_t maxY);
+std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray);
+int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
 time_t getDepartureTime(const JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 
@@ -191,29 +193,9 @@ void render() {
 void showBusStopDepartures() {
   const time_t now = time(NULL);
   const int16_t xMargin = 16;
-  display.fillRoundRect(8, 0, display.width() - 2 * 8, 56, 4, GxEPD_BLACK);
-  display.drawInvertedBitmap(xMargin, 4, epd_bitmap_busmode, 48, 48,
-                             GxEPD_WHITE);
-  display.setTextColor(GxEPD_WHITE);
-  display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(xMargin + 48 + 8, 32 + 4);
-  const char *stopName = busStopDoc["locations"][0]["disassembledName"];
-  display.print(stopName);
-  display.setTextColor(GxEPD_BLACK);
 
-  int y = 56 + 12;
-  std::vector<JsonObject> stopEvents = getSortedStopEvents();
-  for (int i = 0; i < stopEvents.size() && i < 8; i++) {
-    JsonObject stopEvent = stopEvents[i];
-    if (getDepartureTime(stopEvent) > now + 60 * 60) {
-      break;
-    }
-    y = drawStopEvent(stopEvent, y, xMargin);
-    y += 8;
-    display.drawFastHLine(8 + xMargin, y, display.width() - 2 * 8 - 2 * xMargin,
-                          GxEPD_BLACK);
-    y += 8;
-  }
+  showDeparturesForStop(busStopDoc, xMargin, 0, display.height() - 32);
+
   display.setFont(&FreeSans9pt7b);
   char lastUpdatedTimeString[48];
   strftime(lastUpdatedTimeString, sizeof(lastUpdatedTimeString),
@@ -221,14 +203,59 @@ void showBusStopDepartures() {
   int16_t lux, luy;
   uint16_t luw, luh;
   display.getTextBounds(lastUpdatedTimeString, 0, 0, &lux, &luy, &luw, &luh);
-  display.setCursor(display.width() - xMargin - luw, display.height() - 18);
+  display.setCursor(display.width() - xMargin - luw, display.height() - 8);
   display.print(lastUpdatedTimeString);
 }
 
-std::vector<JsonObject> getSortedStopEvents() {
+int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
+                              int16_t top, int16_t maxY) {
+  const time_t now = time(NULL);
+
+  int16_t y = top;
+
+  // Bus Stop Name
+  display.fillRoundRect(8, 0, display.width() - 2 * 8, 56, 4, GxEPD_BLACK);
+  display.drawInvertedBitmap(xMargin, 4, epd_bitmap_busmode, 48, 48,
+                             GxEPD_WHITE);
+  display.setTextColor(GxEPD_WHITE);
+  display.setFont(&FreeSansBold12pt7b);
+  display.setCursor(xMargin + 48 + 8, 32 + 4);
+  const char *stopName = stopDoc["locations"][0]["disassembledName"];
+  display.print(stopName);
+  display.setTextColor(GxEPD_BLACK);
+  y += 56 + 12;
+
+  // Departures
+  int16_t stopEventHeight = 0;
+  std::vector<JsonObject> stopEvents =
+      getSortedStopEvents(stopDoc["stopEvents"]);
+  for (int i = 0; i < stopEvents.size() && i < 8; i++) {
+    JsonObject stopEvent = stopEvents[i];
+
+    // Only show departures within the next hour
+    if (getDepartureTime(stopEvent) > now + 60 * 60) {
+      break;
+    }
+
+    // Don't render if we are going to exceed the allocated height
+    if (y + stopEventHeight > maxY) {
+      break;
+    }
+
+    int16_t oldY = y;
+    y = drawStopEvent(stopEvent, y, xMargin);
+    stopEventHeight = y - oldY;
+    y += 8;
+    display.drawFastHLine(8 + xMargin, y, display.width() - 2 * 8 - 2 * xMargin,
+                          GxEPD_BLACK);
+    y += 8;
+  }
+  return y;
+}
+
+std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
   std::vector<JsonObject> stopEvents;
-  for (int i = 0; i < busStopDoc["stopEvents"].size(); i++) {
-    JsonObject stopEvent = busStopDoc["stopEvents"][i];
+  for (JsonObject stopEvent : stopEventsJsonArray) {
     stopEvents.push_back(stopEvent);
   }
 
@@ -239,7 +266,7 @@ std::vector<JsonObject> getSortedStopEvents() {
   return stopEvents;
 }
 
-int drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
+int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
   const time_t now = time(NULL);
 
   bool isRealtime =
