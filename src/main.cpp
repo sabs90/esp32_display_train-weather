@@ -244,17 +244,17 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
   int16_t y = top;
 
   // Bus Stop Name
-  display.fillRoundRect(xMargin - 8, y, display.width() - 2 * (xMargin - 8), 56,
+  display.fillRoundRect(xMargin - 8, y, display.width() - 2 * (xMargin - 8), 48,
                         4, GxEPD_BLACK);
-  display.drawInvertedBitmap(xMargin, y + 4, epd_bitmap_busmode, 48, 48,
+  display.drawInvertedBitmap(xMargin, y + 4, epd_bitmap_busmode, 40, 40,
                              GxEPD_WHITE);
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(xMargin + 48 + 8, y + 32 + 4);
+  display.setCursor(xMargin + 40 + 4, y + 28 + 4);
   const char *stopName = stopDoc["locations"][0]["disassembledName"];
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
-  y += 56 + 12;
+  y += 48 + 12;
 
   // Departures
   int16_t stopEventHeight = 0;
