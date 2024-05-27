@@ -196,7 +196,7 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
 }
 
 void render() {
-  if (partialRefreshCount > 20) {
+  if (partialRefreshCount > 10) {
     display.setFullWindow();
     partialRefreshCount = 0;
   } else {
