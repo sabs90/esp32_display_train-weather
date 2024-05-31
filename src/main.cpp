@@ -169,6 +169,7 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     filter["stopEvents"][0]["departureTimePlanned"] = true;
     filter["stopEvents"][0]["departureTimeEstimated"] = true;
     filter["stopEvents"][0]["isRealtimeControlled"] = true;
+    filter["stopEvents"][0]["isCancelled"] = true;
     filter["stopEvents"][0]["transportation"]["disassembledName"] = true;
     filter["stopEvents"][0]["transportation"]["origin"]["name"] = true;
     filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
@@ -239,8 +240,6 @@ void showBusStopDepartures() {
 
 int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
                               int16_t top, int16_t maxY) {
-  const time_t now = time(NULL);
-
   int16_t y = top;
 
   // Bus Stop Name
@@ -263,11 +262,6 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
   for (int i = 0; i < stopEvents.size(); i++) {
     JsonObject stopEvent = stopEvents[i];
 
-    // Only show departures within the next hour
-    if (getDepartureTime(stopEvent) > now + 60 * 60) {
-      break;
-    }
-
     // Don't render if we are going to exceed the allocated height
     if (y + stopEventHeight > maxY - 8) {
       break;
@@ -289,16 +283,28 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
 }
 
 std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
-  std::vector<JsonObject> stopEvents;
+  const time_t now = time(NULL);
+
+  std::vector<JsonObject> filteredStopEvents;
   for (JsonObject stopEvent : stopEventsJsonArray) {
-    stopEvents.push_back(stopEvent);
+    // Ignore cancelled departures
+    if (stopEvent["isCancelled"]) {
+      break;
+    }
+
+    // Only show departures within the next hour
+    if (getDepartureTime(stopEvent) > now + 60 * 60) {
+      break;
+    }
+
+    filteredStopEvents.push_back(stopEvent);
   }
 
-  std::sort(stopEvents.begin(), stopEvents.end(),
+  std::sort(filteredStopEvents.begin(), filteredStopEvents.end(),
             [](const JsonObject &a, const JsonObject &b) {
               return getDepartureTime(a) < getDepartureTime(b);
             });
-  return stopEvents;
+  return filteredStopEvents;
 }
 
 int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
