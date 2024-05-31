@@ -150,7 +150,7 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
       "departure_mon?outputFormat=rapidJSON&coordOutputFormat=EPSG%%3A4326&"
       "mode="
       "direct&type_dm=stop&name_dm=%s"
-      "&departureMonitorMacro=true&TfNSWDM="
+      "&departureMonitorMacro=true&excludedMeans=11&TfNSWDM="
       "true&version=10.2.1.42",
       stopId);
   http.begin(url, (const char *)NULL);
