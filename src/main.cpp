@@ -46,11 +46,12 @@ void connectWifi();
 bool fetchData();
 bool fetchForStopId(const char *stopId, JsonDocument &stopDoc);
 void render();
-void showBusStopDepartures();
-int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
-                              int16_t top, int16_t maxY);
+void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b);
+int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
+                              int16_t r, int16_t b);
 std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray);
-int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin = 20);
+int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
+                      int16_t r, int16_t b);
 time_t getDepartureTime(const JsonObject &stopEvent);
 time_t parseTimeUtc(const char *utcTimeString);
 
@@ -207,16 +208,18 @@ void render() {
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
   display.firstPage();
+  const int16_t xMargin = 28;
+  const int16_t yMargin = 64;
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    showBusStopDepartures();
+    showBusStopDepartures(xMargin, yMargin, display.width() - xMargin,
+                          display.height() - yMargin);
   } while (display.nextPage());
 }
 
-void showBusStopDepartures() {
+void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   const time_t now = time(NULL);
-  const int16_t xMargin = 16;
 
   // Show last updated time at the bottom
   display.setFont(&FreeSans9pt7b);
@@ -225,31 +228,31 @@ void showBusStopDepartures() {
            "Last Updated: %d %b %H:%M", localtime(&now));
   int16_t lux, luy;
   uint16_t luw, luh;
-  display.getTextBounds(lastUpdatedTimeString, 0, display.height() - 4, &lux,
-                        &luy, &luw, &luh);
-  display.setCursor((display.width() - luw) / 2, display.height() - 4);
+  display.getTextBounds(lastUpdatedTimeString, 0, b - 4, &lux, &luy, &luw,
+                        &luh);
+  display.setCursor((l + r - luw) / 2, b - 4);
   display.print(lastUpdatedTimeString);
 
   int numStops = stopDocs.size();
-  int16_t heightPerStop = (luy - 4) / numStops;
-  int16_t y = 0;
+  int16_t heightPerStop = (luy - 4 - t) / numStops;
+  int16_t y = t;
   for (JsonDocument stopDoc : stopDocs) {
-    y += showDeparturesForStop(stopDoc, xMargin, y, y + heightPerStop);
+    y = showDeparturesForStop(stopDoc, l, y, r, y + heightPerStop);
   }
 }
 
-int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
-                              int16_t top, int16_t maxY) {
-  int16_t y = top;
+int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
+                              int16_t r, int16_t b) {
+  int16_t y = t;
+  int xMargin = 8;
 
   // Bus Stop Name
-  display.fillRoundRect(xMargin - 8, y, display.width() - 2 * (xMargin - 8), 48,
-                        4, GxEPD_BLACK);
-  display.drawInvertedBitmap(xMargin, y + 4, epd_bitmap_busmode, 40, 40,
+  display.fillRoundRect(l, y, r - l, 48, 4, GxEPD_BLACK);
+  display.drawInvertedBitmap(l + xMargin, y + 4, epd_bitmap_busmode, 40, 40,
                              GxEPD_WHITE);
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(xMargin + 40 + 4, y + 28 + 4);
+  display.setCursor(l + xMargin + 40 + 4, y + 28 + 4);
   const char *stopName = stopDoc["locations"][0]["disassembledName"];
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
@@ -263,19 +266,21 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t xMargin,
     JsonObject stopEvent = stopEvents[i];
 
     // Don't render if we are going to exceed the allocated height
-    if (y + stopEventHeight > maxY - 8) {
+    if (y + stopEventHeight > b - 8) {
       break;
     }
 
     // If not the first entry, draw a divider line
     if (stopEventHeight) {
-      display.drawFastHLine(8 + xMargin, y,
-                            display.width() - 2 * 8 - 2 * xMargin, GxEPD_BLACK);
+      int16_t dividerLineMargin = xMargin + 8;
+      display.drawFastHLine(l + dividerLineMargin, y,
+                            (r - dividerLineMargin) - (l + dividerLineMargin),
+                            GxEPD_BLACK);
       y += 8;
     }
 
     int16_t oldY = y;
-    y = drawStopEvent(stopEvent, y, xMargin);
+    y = drawStopEvent(stopEvent, l + xMargin, y, r - xMargin, b);
     stopEventHeight = y - oldY;
   }
   y += 8;
@@ -307,8 +312,10 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
   return filteredStopEvents;
 }
 
-int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
+int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
+                      int16_t r, int16_t b) {
   const time_t now = time(NULL);
+  int16_t y = t;
 
   bool isRealtime =
       stopEvent["isRealtimeControlled"] && stopEvent["departureTimeEstimated"];
@@ -334,7 +341,7 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
   int16_t bnbx, bnby;
   uint16_t bnbw, bnbh;
   display.getTextBounds(busName, 0, 0, &bnbx, &bnby, &bnbw, &bnbh);
-  display.setCursor(xMargin, y);
+  display.setCursor(l, y);
   display.print(busName);
 
   int16_t ndmbx, ndmby;
@@ -348,10 +355,10 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
   uint16_t mbw, mbh;
   display.getTextBounds(minString, 0, 0, &mbx, &mby, &mbw, &mbh);
 
-  display.setCursor(display.width() - xMargin - mbw, y);
+  display.setCursor(r - mbw, y);
   display.print(minString);
   display.setFont(&FreeSansBold24pt7b);
-  display.setCursor(display.width() - xMargin - mbw - ndmbw, y);
+  display.setCursor(r - mbw - ndmbw, y);
   display.print(nextDepartureMinutesString);
 
   y += 12;
@@ -362,18 +369,18 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int y, int xMargin) {
   int16_t dbx, dby;
   uint16_t dbw, dbh;
   display.getTextBounds(destination, 0, 0, &dbx, &dby, &dbw, &dbh);
-  display.setCursor(xMargin, y);
+  display.setCursor(l, y);
   display.print(destination);
 
   int16_t rtbx, rtby;
   uint16_t rtbw, rtbh;
   display.getTextBounds(departureTimeHM, 0, 0, &rtbx, &rtby, &rtbw, &rtbh);
-  display.setCursor(display.width() - xMargin - rtbw, y);
+  display.setCursor(r - rtbw, y);
   display.print(departureTimeHM);
 
   if (isRealtime) {
-    display.drawInvertedBitmap(display.width() - xMargin - rtbw - 8 - 16,
-                               y - 14, epd_bitmap_rssfeed, 16, 16, GxEPD_BLACK);
+    display.drawInvertedBitmap(r - rtbw - 8 - 16, y - 14, epd_bitmap_rssfeed,
+                               16, 16, GxEPD_BLACK);
   }
 
   y += 12;
