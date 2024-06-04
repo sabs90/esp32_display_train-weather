@@ -294,12 +294,12 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
   for (JsonObject stopEvent : stopEventsJsonArray) {
     // Ignore cancelled departures
     if (stopEvent["isCancelled"]) {
-      break;
+      continue;
     }
 
     // Only show departures within the next hour
     if (getDepartureTime(stopEvent) > now + 60 * 60) {
-      break;
+      continue;
     }
 
     filteredStopEvents.push_back(stopEvent);
