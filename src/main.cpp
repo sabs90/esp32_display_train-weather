@@ -247,16 +247,16 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
   int xMargin = 8;
 
   // Bus Stop Name
-  display.fillRoundRect(l, y, r - l, 48, 4, GxEPD_BLACK);
-  display.drawInvertedBitmap(l + xMargin, y + 4, epd_bitmap_busmode, 40, 40,
+  display.fillRoundRect(l, y, r - l, 36, 4, GxEPD_BLACK);
+  display.drawInvertedBitmap(l + xMargin, y + 2, epd_bitmap_busmode, 32, 32,
                              GxEPD_WHITE);
   display.setTextColor(GxEPD_WHITE);
-  display.setFont(&FreeSansBold12pt7b);
-  display.setCursor(l + xMargin + 40 + 4, y + 28 + 4);
+  display.setFont(&FreeSansBold9pt7b);
+  display.setCursor(l + xMargin + 40 + 4, y + 20 + 4);
   const char *stopName = stopDoc["locations"][0]["disassembledName"];
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
-  y += 48 + 12;
+  y += 36 + 4;
 
   // Departures
   int16_t stopEventHeight = 0;
@@ -272,11 +272,11 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
 
     // If not the first entry, draw a divider line
     if (stopEventHeight) {
-      int16_t dividerLineMargin = xMargin + 8;
+      int16_t dividerLineMargin = xMargin + 4;
       display.drawFastHLine(l + dividerLineMargin, y,
                             (r - dividerLineMargin) - (l + dividerLineMargin),
                             GxEPD_BLACK);
-      y += 8;
+      y += 4;
     }
 
     int16_t oldY = y;
@@ -298,9 +298,9 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
     }
 
     // Only show departures within the next hour
-    if (getDepartureTime(stopEvent) > now + 60 * 60) {
-      break;
-    }
+    // if (getDepartureTime(stopEvent) > now + 60 * 60) {
+    //   break;
+    // }
 
     filteredStopEvents.push_back(stopEvent);
   }
@@ -361,7 +361,7 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
   display.setCursor(r - mbw - ndmbw, y);
   display.print(nextDepartureMinutesString);
 
-  y += 12;
+  y += 8;
 
   display.setFont(&FreeSans9pt7b);
   y += 14;
@@ -383,7 +383,7 @@ int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
                                16, 16, GxEPD_BLACK);
   }
 
-  y += 12;
+  y += 8;
 
   return y;
 }
