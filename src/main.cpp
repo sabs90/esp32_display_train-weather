@@ -252,7 +252,7 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
                              GxEPD_WHITE);
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold9pt7b);
-  display.setCursor(l + xMargin + 40 + 4, y + 20 + 4);
+  display.setCursor(l + xMargin + 32 + 4, y + 20 + 4);
   const char *stopName = stopDoc["locations"][0]["disassembledName"];
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
@@ -298,9 +298,9 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
     }
 
     // Only show departures within the next hour
-    // if (getDepartureTime(stopEvent) > now + 60 * 60) {
-    //   break;
-    // }
+    if (getDepartureTime(stopEvent) > now + 60 * 60) {
+      break;
+    }
 
     filteredStopEvents.push_back(stopEvent);
   }
