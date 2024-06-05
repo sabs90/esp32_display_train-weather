@@ -58,7 +58,7 @@ time_t parseTimeUtc(const char *utcTimeString);
 int partialRefreshCount = 0;
 
 // 2196291
-const char *stopIds[] = {"2035144", "2035150"};
+const char *stopIds[] = {"2035144", "2035159"};
 
 std::vector<JsonDocument> stopDocs;
 
