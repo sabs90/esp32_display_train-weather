@@ -58,8 +58,7 @@ time_t parseTimeUtc(const char *utcTimeString);
 int partialRefreshCount = 0;
 
 // 2196291
-// 10101400
-const char *stopIds[] = {"2196291", "2196292"};
+const char *stopIds[] = {"2035144", "2035150"};
 
 std::vector<JsonDocument> stopDocs;
 
@@ -177,34 +176,22 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     filter["stopEvents"][0]["transportation"]["origin"]["name"] = true;
     filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
 
-    // https://github.com/espressif/arduino-esp32/issues/4279
-    // For some reason, getStream only returns a truncated response.
-    // WiFiClient *input = http.getStreamPtr();
-    // Serial.printf("0 Connected %d, Available: %d\n", http.connected(),
-    //               input->available());
-    // while (input->available() != 0) {
-    // Serial.printf("1 Connected %d, Available: %d\n", http.connected(),
-    //               input->available());
-    // if (!input->available()) {
-    //   break;
-    // }
     DeserializationError err = deserializeJson(
         stopDoc, http.getStream(), DeserializationOption::Filter(filter));
-    // serializeJsonPretty(stopDoc, Serial);
 
     if (err) {
       Serial.printf("Error parsing response! %s\n", err.c_str());
       http.end();
       return false;
     }
-    Serial.println("Parsed input stream");
-    // Serial.printf("2 Connected %d, Available: %d\n", http.connected(),
-    //               input->available());
-    // }
 
     Serial.println("Parsing successful");
-    serializeJsonPretty(stopDoc, Serial);
     http.end();
+
+    // For some reason, this is necessary otherwise we get an IncompleteInput
+    // error. This must affect compilation in some way that makes the code work.
+    stopDoc.size();
+
     return true;
   } else {
     Serial.printf("Error on HTTP request (%d): %s\n", http_code,
@@ -315,9 +302,9 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
     }
 
     // Only show departures within the next hour
-    if (getDepartureTime(stopEvent) > now + 60 * 60) {
-      continue;
-    }
+    // if (getDepartureTime(stopEvent) > now + 60 * 60) {
+    //   continue;
+    // }
 
     filteredStopEvents.push_back(stopEvent);
   }
