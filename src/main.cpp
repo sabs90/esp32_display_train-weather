@@ -302,9 +302,9 @@ std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
     }
 
     // Only show departures within the next hour
-    // if (getDepartureTime(stopEvent) > now + 60 * 60) {
-    //   continue;
-    // }
+    if (getDepartureTime(stopEvent) > now + 60 * 60) {
+      continue;
+    }
 
     filteredStopEvents.push_back(stopEvent);
   }
