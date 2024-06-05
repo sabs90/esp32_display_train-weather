@@ -57,7 +57,9 @@ time_t parseTimeUtc(const char *utcTimeString);
 
 int partialRefreshCount = 0;
 
-const char *stopIds[] = {"2035144", "2035159"};
+// 2196291
+// 10101400
+const char *stopIds[] = {"2196291", "2196292"};
 
 std::vector<JsonDocument> stopDocs;
 
@@ -177,16 +179,31 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
 
     // https://github.com/espressif/arduino-esp32/issues/4279
     // For some reason, getStream only returns a truncated response.
+    // WiFiClient *input = http.getStreamPtr();
+    // Serial.printf("0 Connected %d, Available: %d\n", http.connected(),
+    //               input->available());
+    // while (input->available() != 0) {
+    // Serial.printf("1 Connected %d, Available: %d\n", http.connected(),
+    //               input->available());
+    // if (!input->available()) {
+    //   break;
+    // }
     DeserializationError err = deserializeJson(
-        stopDoc, http.getString(), DeserializationOption::Filter(filter));
+        stopDoc, http.getStream(), DeserializationOption::Filter(filter));
+    // serializeJsonPretty(stopDoc, Serial);
 
     if (err) {
-      http.end();
       Serial.printf("Error parsing response! %s\n", err.c_str());
+      http.end();
       return false;
     }
+    Serial.println("Parsed input stream");
+    // Serial.printf("2 Connected %d, Available: %d\n", http.connected(),
+    //               input->available());
+    // }
 
     Serial.println("Parsing successful");
+    serializeJsonPretty(stopDoc, Serial);
     http.end();
     return true;
   } else {
@@ -233,7 +250,7 @@ void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   display.setCursor((l + r - luw) / 2, b - 4);
   display.print(lastUpdatedTimeString);
 
-  int numStops = stopDocs.size();
+  int numStops = std::max<size_t>(1, stopDocs.size());
   int16_t heightPerStop = (luy - 4 - t) / numStops;
   int16_t y = t;
   for (JsonDocument stopDoc : stopDocs) {
