@@ -47,9 +47,10 @@ bool fetchData();
 bool fetchForStopId(const char *stopId, JsonDocument &stopDoc);
 void render();
 void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b);
-int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
+int16_t showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
                               int16_t r, int16_t b);
 std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray);
+const char *getStopName(JsonDocument &stopDoc);
 int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
                       int16_t r, int16_t b);
 time_t getDepartureTime(const JsonObject &stopEvent);
@@ -57,8 +58,9 @@ time_t parseTimeUtc(const char *utcTimeString);
 
 int partialRefreshCount = 0;
 
-// 2196291
-const char *stopIds[] = {"2035144", "2035159"};
+// const char *stopIds[] = {"219610"};  // Punchbowl station
+// const char *stopIds[] = {"2196291", "2196292"};  // Punchbowl station
+const char *stopIds[] = {"2035144", "2035159"};  // Maroubra
 
 std::vector<JsonDocument> stopDocs;
 
@@ -168,11 +170,14 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     // The filter: it contains "true" for each value we want to keep
     JsonDocument filter;
     filter["locations"][0]["disassembledName"] = true;
+    filter["locations"][0]["assignedStops"][0]["modes"] = true;
     filter["stopEvents"][0]["departureTimePlanned"] = true;
     filter["stopEvents"][0]["departureTimeEstimated"] = true;
     filter["stopEvents"][0]["isRealtimeControlled"] = true;
     filter["stopEvents"][0]["isCancelled"] = true;
+    filter["stopEvents"][0]["location"]["parent"]["disassembledName"] = true;
     filter["stopEvents"][0]["transportation"]["disassembledName"] = true;
+    filter["stopEvents"][0]["transportation"]["iconId"] = true;
     filter["stopEvents"][0]["transportation"]["origin"]["name"] = true;
     filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
 
@@ -188,8 +193,11 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     Serial.println("Parsing successful");
     http.end();
 
+    serializeJsonPretty(stopDoc, Serial);
+
     // For some reason, this is necessary otherwise we get an IncompleteInput
-    // error. This must affect compilation in some way that makes the code work.
+    // error. This must affect compilation in some way that makes the code
+    // work.
     stopDoc.size();
 
     return true;
@@ -245,7 +253,7 @@ void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   }
 }
 
-int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
+int16_t showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
                               int16_t r, int16_t b) {
   int16_t y = t;
   int xMargin = 8;
@@ -257,7 +265,7 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold9pt7b);
   display.setCursor(l + xMargin + 32 + 4, y + 20 + 4);
-  const char *stopName = stopDoc["locations"][0]["disassembledName"];
+  const char *stopName = getStopName(stopDoc);
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
   y += 36 + 4;
@@ -289,6 +297,27 @@ int16_t showDeparturesForStop(JsonDocument stopDoc, int16_t l, int16_t t,
   }
   y += 8;
   return y;
+}
+
+const char *getStopName(JsonDocument &stopDoc) {
+  const char *fallbackStopName = stopDoc["locations"][0]["disassembledName"];
+  JsonArray stopEvents = stopDoc["stopEvents"];
+  if (stopEvents.size() > 0) {
+    const char *stopName =
+        stopEvents[0]["location"]["parent"]["disassembledName"];
+    for (JsonObject stopEvent : stopEvents) {
+      const char *eventStopName =
+          stopEvent["location"]["parent"]["disassembledName"];
+      if (strcmp(stopName, eventStopName) != 0) {
+        Serial.printf("Stop name mismatch: %s != %s\n", stopName,
+                      eventStopName);
+        return fallbackStopName;
+      }
+    }
+    return stopName;
+  } else {
+    return fallbackStopName;
+  }
 }
 
 std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray) {
