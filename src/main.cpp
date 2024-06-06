@@ -42,6 +42,11 @@ GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(
 SPIClass hspi(HSPI);
 #endif
 
+struct stopDescription {
+  const char *name;
+  std::vector<int> iconIds;
+};
+
 void connectWifi();
 bool fetchData();
 bool fetchForStopId(const char *stopId, JsonDocument &stopDoc);
@@ -50,7 +55,8 @@ void showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b);
 int16_t showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
                               int16_t r, int16_t b);
 std::vector<JsonObject> getSortedStopEvents(JsonArray stopEventsJsonArray);
-const char *getStopName(JsonDocument &stopDoc);
+stopDescription getStopDescription(JsonDocument &stopDoc);
+const unsigned char *getBitmapForIconId(int16_t iconId);
 int16_t drawStopEvent(const JsonObject &stopEvent, int16_t l, int16_t t,
                       int16_t r, int16_t b);
 time_t getDepartureTime(const JsonObject &stopEvent);
@@ -58,8 +64,12 @@ time_t parseTimeUtc(const char *utcTimeString);
 
 int partialRefreshCount = 0;
 
+// const char *stopIds[] = {"200060"};  // Central
+// const char *stopIds[] = {"200020"};  // Circular Quay
 // const char *stopIds[] = {"219610"};  // Punchbowl station
-// const char *stopIds[] = {"2196291", "2196292"};  // Punchbowl station
+// const char *stopIds[] = {"203294"};  // Juniors Kingsford
+// const char *stopIds[] = {"212110"};  // Epping
+// const char *stopIds[] = {"2196291", "2196292"};  // Punchbowl platforms
 const char *stopIds[] = {"2035144", "2035159"};  // Maroubra
 
 std::vector<JsonDocument> stopDocs;
@@ -177,7 +187,7 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     filter["stopEvents"][0]["isCancelled"] = true;
     filter["stopEvents"][0]["location"]["parent"]["disassembledName"] = true;
     filter["stopEvents"][0]["transportation"]["disassembledName"] = true;
-    filter["stopEvents"][0]["transportation"]["iconId"] = true;
+    filter["stopEvents"][0]["transportation"]["product"]["iconId"] = true;
     filter["stopEvents"][0]["transportation"]["origin"]["name"] = true;
     filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
 
@@ -193,7 +203,7 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     Serial.println("Parsing successful");
     http.end();
 
-    serializeJsonPretty(stopDoc, Serial);
+    // serializeJsonPretty(stopDoc, Serial);
 
     // For some reason, this is necessary otherwise we get an IncompleteInput
     // error. This must affect compilation in some way that makes the code
@@ -259,13 +269,18 @@ int16_t showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
   int xMargin = 8;
 
   // Bus Stop Name
+  stopDescription stopDesc = getStopDescription(stopDoc);
   display.fillRoundRect(l, y, r - l, 36, 4, GxEPD_BLACK);
-  display.drawInvertedBitmap(l + xMargin, y + 2, epd_bitmap_busmode, 32, 32,
-                             GxEPD_WHITE);
+  int x = l + xMargin;
+  for (int iconId : stopDesc.iconIds) {
+    display.drawInvertedBitmap(x, y + 2, getBitmapForIconId(iconId), 32, 32,
+                               GxEPD_WHITE);
+    x += 32 + 4;
+  }
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeSansBold9pt7b);
-  display.setCursor(l + xMargin + 32 + 4, y + 20 + 4);
-  const char *stopName = getStopName(stopDoc);
+  display.setCursor(x, y + 20 + 4);
+  const char *stopName = stopDesc.name;
   display.print(stopName);
   display.setTextColor(GxEPD_BLACK);
   y += 36 + 4;
@@ -299,8 +314,9 @@ int16_t showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
   return y;
 }
 
-const char *getStopName(JsonDocument &stopDoc) {
+stopDescription getStopDescription(JsonDocument &stopDoc) {
   const char *fallbackStopName = stopDoc["locations"][0]["disassembledName"];
+  std::vector<int> iconIds;
   JsonArray stopEvents = stopDoc["stopEvents"];
   if (stopEvents.size() > 0) {
     const char *stopName =
@@ -308,15 +324,43 @@ const char *getStopName(JsonDocument &stopDoc) {
     for (JsonObject stopEvent : stopEvents) {
       const char *eventStopName =
           stopEvent["location"]["parent"]["disassembledName"];
-      if (strcmp(stopName, eventStopName) != 0) {
-        Serial.printf("Stop name mismatch: %s != %s\n", stopName,
-                      eventStopName);
-        return fallbackStopName;
+      if (!stopName || !eventStopName || strcmp(stopName, eventStopName) != 0) {
+        stopName = fallbackStopName;
+      }
+      int eventIconId = stopEvent["transportation"]["product"]["iconId"];
+      if (std::find(iconIds.begin(), iconIds.end(), eventIconId) ==
+          iconIds.end()) {
+        iconIds.push_back(eventIconId);
       }
     }
-    return stopName;
+    std::sort(iconIds.begin(), iconIds.end());
+    return {stopName, iconIds};
   } else {
-    return fallbackStopName;
+    JsonArray modes = stopDoc["locations"][0]["assignedStops"][0]["modes"];
+    for (int mode : modes) {
+      iconIds.push_back(mode);
+    }
+    std::sort(iconIds.begin(), iconIds.end());
+    return {fallbackStopName, iconIds};
+  }
+}
+
+const unsigned char *getBitmapForIconId(int16_t iconId) {
+  switch (iconId) {
+    case 1:
+      return epd_bitmap_trainmode;
+    case 2:
+      return epd_bitmap_metromode;
+    case 4:
+      return epd_bitmap_lightrailmode;
+    case 9:
+      return epd_bitmap_ferrymode;
+    case 5:
+    case 11:  // School bus
+      return epd_bitmap_busmode;
+    default:
+      Serial.printf("unknown iconId: %d\n", iconId);
+      return epd_bitmap_busmode;
   }
 }
 
