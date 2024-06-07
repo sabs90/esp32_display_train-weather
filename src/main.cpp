@@ -203,12 +203,10 @@ bool fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
     Serial.println("Parsing successful");
     http.end();
 
-    // serializeJsonPretty(stopDoc, Serial);
-
     // For some reason, this is necessary otherwise we get an IncompleteInput
     // error. This must affect compilation in some way that makes the code
     // work.
-    stopDoc.size();
+    serializeJsonPretty(stopDoc, Serial);
 
     return true;
   } else {
