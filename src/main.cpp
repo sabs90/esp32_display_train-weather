@@ -1,7 +1,8 @@
 // Sydney Busses Departure Board.
 
 // Use HSPI for EPD (and VSPI for SD) with Waveshare ESP32 Driver Board
-#define USE_HSPI_FOR_EPD
+#define DRIVER_WAVESHARE
+// #define DRIVER_DESPI_C02
 
 // base class GxEPD2_GFX can be used to pass references or pointers to the
 // display instance as parameter, uses ~1.2k more code enable or disable
@@ -34,11 +35,19 @@
 
 // copy the constructor from GxEPD2_display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
+#if defined(DRIVER_WAVESHARE)
 GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(
     GxEPD2_750_T7(/*CS=*/15, /*DC=D3*/ 27, /*RST=*/26,
                   /*BUSY=*/25));  // GDEW075T7 800x480, EK79655 (GD7965)
+#endif
 
-#if defined(ESP32) && defined(USE_HSPI_FOR_EPD)
+#if defined(DRIVER_DESPI_C02)
+GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 2> display(
+    GxEPD2_750_T7(/*CS=*/13, /*DC=D3*/ 22, /*RST=*/21,
+                  /*BUSY=*/14));  // GDEW075T7 800x480, EK79655 (GD7965)
+#endif
+
+#if defined(DRIVER_WAVESHARE)
 SPIClass hspi(HSPI);
 #endif
 
@@ -79,16 +88,18 @@ void setup() {
   Serial.println("setup");
   connectWifi();
 
-  // *** special handling for Waveshare ESP32 Driver board *** //
-  // ********************************************************* //
-#if defined(ESP32) && defined(USE_HSPI_FOR_EPD)
+#if defined(DRIVER_WAVESHARE)
+  display.init(115200);
   hspi.begin(13, 12, 14, 15);  // remap hspi for EPD (swap pins)
   display.epd2.selectSPI(hspi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
 #endif
-  // *** end of special handling for Waveshare ESP32 Driver board *** //
-  // **************************************************************** //
 
-  display.init(115200);
+#if defined(DRIVER_DESPI_C02)
+  display.init(115200, true, 10, false);
+  pinMode(26, OUTPUT);
+  digitalWrite(26, HIGH);
+#endif
+
   Serial.println("setup done");
 }
 
