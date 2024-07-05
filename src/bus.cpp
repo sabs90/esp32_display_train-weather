@@ -33,8 +33,6 @@ Bus::Bus(GxEPD2_GFX &_display, Renderer &renderer)
     : _display(_display), _renderer(renderer) {}
 
 bool Bus::fetchData() {
-  uint32_t start = millis();
-
   // WIFI
   wifiRSSI = WiFi.RSSI();  // get WiFi signal strength now, because the WiFi
                            // will be turned off to save power!
@@ -55,8 +53,6 @@ bool Bus::fetchData() {
   Serial.printf("Bat voltage: %d percent: %d\n", batVoltage, batPercent);
 
   updateTime = time(NULL);
-
-  Serial.printf("Finished all requests in %lu millis.\n", millis() - start);
 
   return true;
 }
