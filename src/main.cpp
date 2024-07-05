@@ -136,7 +136,7 @@ void initDisplay() {
     displayInitialized = true;
   }
 
-  display.setRotation(1);
+  display.setRotation(3);
   display.setTextSize(1);
   display.setTextColor(GxEPD_BLACK);
   display.setTextWrap(false);
