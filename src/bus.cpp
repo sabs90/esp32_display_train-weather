@@ -37,13 +37,21 @@ bool Bus::fetchData() {
   wifiRSSI = WiFi.RSSI();  // get WiFi signal strength now, because the WiFi
                            // will be turned off to save power!
 
+  updateTime = time(NULL);
+
   stopDocs.clear();
-  for (const char *stopId : stopIds) {
-    JsonDocument stopDoc;
-    if (!fetchForStopId(stopId, stopDoc)) {
-      return false;
+  uint64_t sleepDuration = calculateSleepDuration();
+  if (calculateSleepDuration() > 5 * 60) {
+    nextUpdateTime = updateTime + sleepDuration;
+    Serial.println("Skipping data fetch");
+  } else {
+    for (const char *stopId : stopIds) {
+      JsonDocument stopDoc;
+      if (!fetchForStopId(stopId, stopDoc)) {
+        return false;
+      }
+      stopDocs.push_back(stopDoc);
     }
-    stopDocs.push_back(stopDoc);
   }
 
   // BATTERY
@@ -51,8 +59,6 @@ bool Bus::fetchData() {
   batPercent =
       calcBatPercent(batVoltage, CRIT_LOW_BATTERY_VOLTAGE, MAX_BATTERY_VOLTAGE);
   Serial.printf("Bat voltage: %d percent: %d\n", batVoltage, batPercent);
-
-  updateTime = time(NULL);
 
   return true;
 }
@@ -138,7 +144,14 @@ void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   int16_t statusHeight =
       _renderer.drawStatusBar(b, updateTime, wifiRSSI, batPercent);
 
-  int numStops = std::max<size_t>(1, stopDocs.size());
+  int numStops = stopDocs.size();
+  if (stopDocs.size() == 0) {
+    char nextUpdateAtString[48];
+    strftime(nextUpdateAtString, sizeof(nextUpdateAtString),
+             "Next Update: %H:%M", localtime(&nextUpdateTime));
+    _renderer.drawError(epd_bitmap_sleep_schedule, nextUpdateAtString);
+    return;
+  }
   int16_t heightPerStop = (b - statusHeight - 4 - t) / numStops;
   int16_t y = t;
   for (JsonDocument stopDoc : stopDocs) {

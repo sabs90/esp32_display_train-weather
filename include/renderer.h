@@ -28,7 +28,7 @@ class Renderer {
 
   int16_t drawStatusBar(int16_t yBaseline, time_t lastUpdatedTime, int rssi,
                         uint32_t batPercent);
-  void drawError(const uint8_t *bitmap_196x196, const String &errMsgLn1,
+  void drawError(const uint8_t *bitmap_192x192, const String &errMsgLn1,
                  const String &errMsgLn2 = "");
 
  private:

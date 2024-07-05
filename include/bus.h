@@ -26,6 +26,7 @@ class Bus : public IApp {
   uint32_t batPercent;
   int wifiRSSI;  // “Received Signal Strength Indicator"
   time_t updateTime;
+  time_t nextUpdateTime;
 
   std::vector<JsonDocument> stopDocs;
 
