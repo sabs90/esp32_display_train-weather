@@ -47,6 +47,7 @@ void handleFatalError(const uint8_t* bitmap_196x196, const String& errMsgLn1,
                       const String& errMsgLn2 = "");
 
 bool displayInitialized = false;
+uint32_t lastTimeSync = 0;
 int partialRefreshCount = 0;
 
 void setup() {
@@ -77,12 +78,22 @@ void setup() {
     handleFatalError(epd_bitmap_wifi_off, "Time Synchronization Failed");
     return;
   }
+  lastTimeSync = millis();
 
   Serial.println("setup done");
 }
 
 void loop() {
   uint32_t start = millis();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();
+  }
+
+  if (millis() - lastTimeSync > 60 * 60 * 1000) {
+    waitForSNTPSync();
+    lastTimeSync = millis();
+  }
 
   // Fetch
   app->fetchData();
