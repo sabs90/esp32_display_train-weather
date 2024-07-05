@@ -87,10 +87,12 @@ void loop() {
   uint32_t start = millis();
 
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Reconnecting to WiFi");
     WiFi.reconnect();
   }
 
   if (millis() - lastTimeSync > 60 * 60 * 1000) {
+    Serial.println("Re-synchronizing time");
     waitForSNTPSync();
     lastTimeSync = millis();
   }
