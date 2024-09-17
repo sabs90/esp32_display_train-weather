@@ -6,8 +6,8 @@
 #include <cstdint>
 
 // Use HSPI for EPD (and VSPI for SD) with Waveshare ESP32 Driver Board
-// #define DRIVER_WAVESHARE
-#define DRIVER_DESPI_C02
+#define DRIVER_WAVESHARE
+//#define DRIVER_DESPI_C02
 
 extern const int16_t X_MARGIN;
 extern const int16_t Y_MARGIN;

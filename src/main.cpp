@@ -109,6 +109,7 @@ void loop() {
     display.fillScreen(GxEPD_WHITE);
     // display.drawRect(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN * 2,
     //                  display.height() - Y_MARGIN * 2, GxEPD_BLACK);
+    // margin for ikea frame
     app->render();
   } while (display.nextPage());
 

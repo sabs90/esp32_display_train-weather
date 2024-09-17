@@ -27,7 +27,10 @@
 // const char *stopIds[] = {"203294"};  // Juniors Kingsford
 // const char *stopIds[] = {"212110"};  // Epping
 // const char *stopIds[] = {"2196291", "2196292"};  // Punchbowl platforms
-const char *stopIds[] = {"2035144", "2035159"};  // Maroubra
+const char *stopIds[] = {"2196291"};  // Punchbowl - citybound
+// const char *stopIds[] = {"2196291", "2196275"};  // Punchbowl citybound & bus stop
+// const char *stopIds[] = {"2196291", "2196292", "2196275"};  // Punchbowl citybound, west, & bus stop
+//const char *stopIds[] = {"2035144", "2035159"};  // Maroubra
 
 Bus::Bus(GxEPD2_GFX &_display, Renderer &renderer)
     : _display(_display), _renderer(renderer) {}
@@ -134,7 +137,9 @@ bool Bus::fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
 
 void Bus::render() {
   showBusStopDepartures(X_MARGIN, Y_MARGIN, _display.width() - X_MARGIN,
-                        _display.height() - Y_MARGIN);
+                        _display.height() - Y_MARGIN); //just giving myself 100 pixels to play with
+  // Insert weather function here
+  // change y margin to the top of the bus box, change display height - ymargin to bottom of bus box
 }
 
 void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
@@ -152,8 +157,13 @@ void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
     _renderer.drawError(epd_bitmap_sleep_schedule, nextUpdateAtString);
     return;
   }
+  
   int16_t heightPerStop = (b - statusHeight - 4 - t) / numStops;
-  int16_t y = t;
+  Serial.printf("Height for the train stops is: %lu pixels per stop and %lu in total", heightPerStop, heightPerStop * numStops);
+  Serial.printf("Y-Margin is: %lu pixels", Y_MARGIN);
+  Serial.printf("Display height is is: %lu pixels", _display.height()); 
+  // int16_t y = t; // change this to the top of the bus box
+  int16_t y = 400; //change this when you build methodology of how to divvy up the screen
   for (JsonDocument stopDoc : stopDocs) {
     y = showDeparturesForStop(stopDoc, l, y, r, y + heightPerStop);
   }

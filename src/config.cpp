@@ -4,6 +4,7 @@
 
 const int16_t X_MARGIN = 28;
 const int16_t Y_MARGIN = 64;
+// change to define the space required for each element 
 
 // PINS
 // The configuration below is intended for use with the project's official
