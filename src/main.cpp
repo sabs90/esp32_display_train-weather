@@ -24,6 +24,8 @@
 #include "icons.h"
 #include "renderer.h"
 #include "secrets.h"
+#include "weather.h"
+#include "weather_icons.h"
 
 // copy the constructor from GxEPD2display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
@@ -37,7 +39,9 @@ SPIClass hspi(HSPI);
 
 Renderer renderer(display);
 Bus bus(display, renderer);
-IApp* app = &bus;
+Weather weather(display, renderer);
+IApp* apps[] = {&bus, &weather};
+const int numApps = sizeof(apps) / sizeof(apps[0]); //do i even need this?
 
 void initDisplay();
 void sleep(bool forceDeepSleep = false);
@@ -98,7 +102,17 @@ void loop() {
   }
 
   // Fetch
-  app->fetchData();
+  // ORIGINAL app->fetchData();
+  /*
+  for (IApp* app : apps) {
+      app->fetchData();
+  }
+  */
+  // Fetch data for all apps
+  for (int i = 0; i < numApps; i++) {
+    apps[i]->fetchData();
+  } 
+
 
   uint32_t fetchComplete = millis();
   Serial.printf("Fetched data in %lu millis.\n", fetchComplete - start);
@@ -110,7 +124,24 @@ void loop() {
     // display.drawRect(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN * 2,
     //                  display.height() - Y_MARGIN * 2, GxEPD_BLACK);
     // margin for ikea frame
-    app->render();
+    //ORIGINAL app->render();
+    /*
+    // Render bus information
+    bus.render();
+    
+    // Set render area for weather and render
+    weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() / 3, display.height() / 3);
+    weather.render();
+    */
+    
+    // Set render areas for each app
+    bus.setRenderArea(X_MARGIN, display.height() / 2 , display.width() - X_MARGIN, display.height() - Y_MARGIN);
+    weather.setRenderArea(X_MARGIN, Y_MARGIN , display.width() - X_MARGIN , display.height() / 2);
+    
+    // Render all apps
+    for (int i = 0; i < numApps; i++) {
+      apps[i]->render();
+    }
   } while (display.nextPage());
 
   uint32_t renderComplete = millis();

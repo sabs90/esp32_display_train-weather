@@ -66,6 +66,7 @@ bool Bus::fetchData() {
   return true;
 }
 
+
 bool Bus::fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
   uint32_t start = millis();
   WiFiClientSecure client;
@@ -135,11 +136,30 @@ bool Bus::fetchForStopId(const char *stopId, JsonDocument &stopDoc) {
   }
 }
 
+void Bus::setRenderArea(int16_t x, int16_t y, int16_t w, int16_t h) {
+    // bus.setRenderArea(X_MARGIN (28), display.height() / 2 , display.width() - X_MARGIN (28) , display.height() - Y_MARGIN (64));
+    // x = 28, y = 400, w = 370, h = 736
+
+    _renderX = x;
+    _renderY = y;
+    _renderWidth = w;
+    _renderHeight = h;
+}
+
 void Bus::render() {
+  /* Original function
   showBusStopDepartures(X_MARGIN, Y_MARGIN, _display.width() - X_MARGIN,
-                        _display.height() - Y_MARGIN); //just giving myself 100 pixels to play with
+                        _display.height() - Y_MARGIN); 
+                        */
+
+  //showBusStopDepartures(X_MARGIN, _display.height()/2 , _display.width() - X_MARGIN,
+  //                        _display.height() - Y_MARGIN); 
+
+  
   // Insert weather function here
   // change y margin to the top of the bus box, change display height - ymargin to bottom of bus box
+  //showBusStopDepartures(_renderX, _renderY, _renderX + _renderWidth, _renderY + _renderHeight);
+  showBusStopDepartures(_renderX, _renderY, _renderWidth, _renderHeight);
 }
 
 void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
@@ -148,6 +168,7 @@ void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   // Show last updated time at the bottom
   int16_t statusHeight =
       _renderer.drawStatusBar(b, updateTime, wifiRSSI, batPercent);
+  // this works as an absolute reference, not relative. change how it works
 
   int numStops = stopDocs.size();
   if (stopDocs.size() == 0) {
@@ -162,8 +183,7 @@ void Bus::showBusStopDepartures(int16_t l, int16_t t, int16_t r, int16_t b) {
   Serial.printf("Height for the train stops is: %lu pixels per stop and %lu in total", heightPerStop, heightPerStop * numStops);
   Serial.printf("Y-Margin is: %lu pixels", Y_MARGIN);
   Serial.printf("Display height is is: %lu pixels", _display.height()); 
-  // int16_t y = t; // change this to the top of the bus box
-  int16_t y = 400; //change this when you build methodology of how to divvy up the screen
+   int16_t y = t; // 
   for (JsonDocument stopDoc : stopDocs) {
     y = showDeparturesForStop(stopDoc, l, y, r, y + heightPerStop);
   }
@@ -195,13 +215,18 @@ int16_t Bus::showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
   int16_t stopEventHeight = 0;
   std::vector<JsonObject> stopEvents =
       getSortedStopEvents(stopDoc["stopEvents"]);
-  for (int i = 0; i < stopEvents.size(); i++) {
+  
+  const int maxDepartures = 4;  // Limit to 4 departures
+  int departuresShown = 0;
+  for (int i = 0; i < stopEvents.size() && departuresShown < maxDepartures; i++) {
     JsonObject stopEvent = stopEvents[i];
 
     // Don't render if we are going to exceed the allocated height
     if (y + stopEventHeight > b - 8) {
       break;
     }
+    Serial.printf("y is %lu, stopeventheight is %lu, and b is %lu", y, stopEventHeight, b);
+    // why isn't this working ????????
 
     // If not the first entry, draw a divider line
     if (stopEventHeight) {
@@ -215,6 +240,8 @@ int16_t Bus::showDeparturesForStop(JsonDocument &stopDoc, int16_t l, int16_t t,
     int16_t oldY = y;
     y = drawStopEvent(stopEvent, l + xMargin, y, r - xMargin, b);
     stopEventHeight = y - oldY;
+
+    departuresShown++;
   }
   y += 8;
   return y;

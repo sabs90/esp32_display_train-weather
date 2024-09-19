@@ -163,6 +163,9 @@ int16_t Renderer::drawMultiLnString(int16_t x, int16_t y, const String &text,
  */
 int16_t Renderer::drawStatusBar(int16_t yBaseline, time_t lastUpdatedTime,
                                 int rssi, uint32_t batPercent) {
+  
+  Serial.printf("drawtatusbar: yBaseline is %lu", yBaseline);
+
   String dataStr;
   _display.setFont(&FreeSans9pt7b);
   int pos = _display.width() - X_MARGIN - 8;
