@@ -26,6 +26,8 @@
 #include "secrets.h"
 #include "weather.h"
 #include "weather_icons.h"
+#include "prayer_times.h"
+#include "time_sync.h"
 
 // copy the constructor from GxEPD2display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
@@ -40,8 +42,9 @@ SPIClass hspi(HSPI);
 Renderer renderer(display);
 Bus bus(display, renderer);
 Weather weather(display, renderer);
-IApp* apps[] = {&bus, &weather};
-const int numApps = sizeof(apps) / sizeof(apps[0]); //do i even need this?
+PrayerTimes prayerTimes(display, renderer);
+IApp* apps[] = {&weather, &prayerTimes, &bus};
+const int numApps = sizeof(apps) / sizeof(apps[0]); 
 
 void initDisplay();
 void sleep(bool forceDeepSleep = false);
@@ -69,11 +72,17 @@ void setup() {
   // WIFI
   wl_status_t wifiStatus = startWiFi();
   if (wifiStatus != WL_CONNECTED) {  // WiFi Connection Failed
+    if (!syncTime()) {
+      Serial.println("Time synchronization failed!");
+      // Handle the error (maybe retry or continue with unsynchronized time)
+    }  
+    
     handleFatalError(epd_bitmap_wifi_off, wifiStatus == WL_NO_SSID_AVAIL
                                               ? "Network Not Available"
                                               : "Wifi Connection Failed");
     return;
   }
+
 
   // TIME SYNCHRONIZATION
   configTzTime(TIMEZONE, NTP_SERVER_1, NTP_SERVER_2);
@@ -125,19 +134,17 @@ void loop() {
     //                  display.height() - Y_MARGIN * 2, GxEPD_BLACK);
     // margin for ikea frame
     //ORIGINAL app->render();
-    /*
-    // Render bus information
-    bus.render();
     
-    // Set render area for weather and render
-    weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() / 3, display.height() / 3);
-    weather.render();
-    */
     
     // Set render areas for each app
-    bus.setRenderArea(X_MARGIN, display.height() / 2 , display.width() - X_MARGIN, display.height() - Y_MARGIN);
-    weather.setRenderArea(X_MARGIN, Y_MARGIN , display.width() - X_MARGIN , display.height() / 2);
+    int16_t oneThirdHeight = (display.height() - Y_MARGIN *2) / 3;
+    weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN, oneThirdHeight);
+    prayerTimes.setRenderArea(X_MARGIN, Y_MARGIN + oneThirdHeight, display.width() - X_MARGIN, oneThirdHeight * 2);
+    bus.setRenderArea(X_MARGIN, Y_MARGIN + 2 * oneThirdHeight - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN);
     
+    // Update current time for prayer times
+    // prayerTimes.updateCurrentTime();
+
     // Render all apps
     for (int i = 0; i < numApps; i++) {
       apps[i]->render();

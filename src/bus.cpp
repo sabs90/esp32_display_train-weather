@@ -27,8 +27,9 @@
 // const char *stopIds[] = {"203294"};  // Juniors Kingsford
 // const char *stopIds[] = {"212110"};  // Epping
 // const char *stopIds[] = {"2196291", "2196292"};  // Punchbowl platforms
-const char *stopIds[] = {"2196291"};  // Punchbowl - citybound
+// const char *stopIds[] = {"2196291"};  // Punchbowl - citybound
 // const char *stopIds[] = {"2196291", "2196275"};  // Punchbowl citybound & bus stop
+const char *stopIds[] = {"2196275"};  // linda st bus stop
 // const char *stopIds[] = {"2196291", "2196292", "2196275"};  // Punchbowl citybound, west, & bus stop
 //const char *stopIds[] = {"2035144", "2035159"};  // Maroubra
 

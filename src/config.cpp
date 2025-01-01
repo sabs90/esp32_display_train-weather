@@ -54,9 +54,9 @@ const char *NTP_SERVER_2 = "time.nist.gov";
 // NTP_TIMEOUT or select closer/lower latency time servers.
 const unsigned long NTP_TIMEOUT = 20000;  // ms
 
-const uint16_t REFRESH_SCHEDULE[24] = {0,   0,  0,  0,  0,  0,  60, 120,
+const uint16_t REFRESH_SCHEDULE[24] = {60,   0,  0,  0,  0,  0,  60, 120,
                                        120, 60, 60, 60, 60, 60, 60, 60,
-                                       60,  60, 60, 60, 60, 60, 0,  0};
+                                       60,  60, 60, 60, 60, 60, 60,  0};
 const uint32_t DEEP_SLEEP_THRESHOLD = 5 * 60;
 
 // BATTERY
