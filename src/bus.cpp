@@ -148,18 +148,6 @@ void Bus::setRenderArea(int16_t x, int16_t y, int16_t w, int16_t h) {
 }
 
 void Bus::render() {
-  /* Original function
-  showBusStopDepartures(X_MARGIN, Y_MARGIN, _display.width() - X_MARGIN,
-                        _display.height() - Y_MARGIN); 
-                        */
-
-  //showBusStopDepartures(X_MARGIN, _display.height()/2 , _display.width() - X_MARGIN,
-  //                        _display.height() - Y_MARGIN); 
-
-  
-  // Insert weather function here
-  // change y margin to the top of the bus box, change display height - ymargin to bottom of bus box
-  //showBusStopDepartures(_renderX, _renderY, _renderX + _renderWidth, _renderY + _renderHeight);
   showBusStopDepartures(_renderX, _renderY, _renderWidth, _renderHeight);
 }
 

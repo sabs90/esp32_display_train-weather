@@ -28,6 +28,7 @@
 #include "weather_icons.h"
 #include "prayer_times.h"
 #include "time_sync.h"
+#include "status_bar.h"
 
 // copy the constructor from GxEPD2display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
@@ -43,7 +44,10 @@ Renderer renderer(display);
 Bus bus(display, renderer);
 Weather weather(display, renderer);
 PrayerTimes prayerTimes(display, renderer);
-IApp* apps[] = {&weather, &prayerTimes, &bus};
+StatusBar statusBar(display, renderer);
+// ALL 3 Apps: IApp* apps[] = {&weather, &prayerTimes, &bus};
+IApp* apps[] = {&weather, &prayerTimes, &statusBar}; //Only weather and prayertimes and status bar. Let's see if this works
+
 const int numApps = sizeof(apps) / sizeof(apps[0]); 
 
 void initDisplay();
@@ -110,41 +114,39 @@ void loop() {
     lastTimeSync = millis();
   }
 
-  // Fetch
-  // ORIGINAL app->fetchData();
-  /*
-  for (IApp* app : apps) {
-      app->fetchData();
-  }
-  */
   // Fetch data for all apps
   for (int i = 0; i < numApps; i++) {
     apps[i]->fetchData();
   } 
 
-
   uint32_t fetchComplete = millis();
   Serial.printf("Fetched data in %lu millis.\n", fetchComplete - start);
+
+  // Update status bar values
+  uint32_t batVoltage = readBatteryVoltage();
+  uint32_t batPercent = calcBatPercent(batVoltage, CRIT_LOW_BATTERY_VOLTAGE, MAX_BATTERY_VOLTAGE);
+  statusBar.updateValues(time(NULL), WiFi.RSSI(), batPercent);
+  //statusBar.updateValues(millis(), WiFi.RSSI(), readBatteryVoltage());
 
   // Render
   initDisplay();
   do {
     display.fillScreen(GxEPD_WHITE);
-    // display.drawRect(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN * 2,
-    //                  display.height() - Y_MARGIN * 2, GxEPD_BLACK);
-    // margin for ikea frame
-    //ORIGINAL app->render();
+    // margin for ikea frame    
     
-    
-    // Set render areas for each app
+    // Set render areas for each app. Left, Top, Right, Bottom. 
     int16_t oneThirdHeight = (display.height() - Y_MARGIN *2) / 3;
-    weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN, oneThirdHeight);
-    prayerTimes.setRenderArea(X_MARGIN, Y_MARGIN + oneThirdHeight, display.width() - X_MARGIN, oneThirdHeight * 2);
-    bus.setRenderArea(X_MARGIN, Y_MARGIN + 2 * oneThirdHeight - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN);
-    
-    // Update current time for prayer times
-    // prayerTimes.updateCurrentTime();
+    int16_t marginSpacing = 20;
+    int16_t Statusbarheight = 15;
 
+    //weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN, oneThirdHeight);
+    prayerTimes.setRenderArea(X_MARGIN, display.height()/2 + marginSpacing, display.width() - X_MARGIN, display.height()/2 - Y_MARGIN);
+    bus.setRenderArea(X_MARGIN, Y_MARGIN + 2 * oneThirdHeight - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN - 30);
+    statusBar.setRenderArea(X_MARGIN, display.height() - Y_MARGIN - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN);
+    //weather.setRenderArea(X_MARGIN, display.height() - Y_MARGIN - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN);
+    weather.setRenderArea(X_MARGIN, Y_MARGIN + 5, display.width() /2 , 50);
+
+    // Update current time for prayer times
     // Render all apps
     for (int i = 0; i < numApps; i++) {
       apps[i]->render();

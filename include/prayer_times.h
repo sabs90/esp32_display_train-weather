@@ -30,11 +30,13 @@ private:
     int currentPrayerIndex;
     int nextPrayerIndex;
     time_t now;
+    time_t adjustToNextDay(time_t prayerTime);
 
     bool fetchPrayerTimes();
     void updateCurrentAndNextPrayer();
     String formatCountdown(time_t target);
     time_t parseTime(const String& timeStr);
+    void renderProgressCircle(int16_t centerX, int16_t centerY, int16_t radius, float progress);
 };
 
 #endif // PRAYER_TIMES_H

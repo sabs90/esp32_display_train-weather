@@ -127,101 +127,6 @@ bool PrayerTimes::fetchPrayerTimes() {
     }
 }
 
-
-/*
-bool PrayerTimes::fetchPrayerTimes() {
-    WiFiClientSecure client;
-    HTTPClient http;
-
-    client.setInsecure(); // Ignore SSL certificate validation
-
-    // Replace with your location's latitude and longitude
-    String url = "http://api.aladhan.com/v1/timings?latitude=-33.8688&longitude=151.2093&method=3";
-
-    http.begin(client, url);
-    int httpCode = http.GET();
-
-    if (httpCode > 0) {
-        Serial.printf("HTTP GET request successful, code: %d\n", httpCode);
-        String payload = http.getString();
-        Serial.println("Response payload: " + payload);
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload);
-
-        if (error) {
-            Serial.print("deserializeJson() failed: ");
-            Serial.println(error.c_str());
-            http.end();
-            return false;
-        }
-
-        // Debug print
-        Serial.println("API Response:");
-        serializeJsonPretty(doc, Serial);
-
-        const char* prayerNames[] = {"Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"};
-        for (int i = 0; i < 6; i++) {
-            String timeStr = doc["data"]["timings"][prayerNames[i]].as<String>();
-            prayers[i].name = prayerNames[i];
-            prayers[i].time = parseTime(timeStr);
-            
-            // Debug print
-            Serial.printf("%s time: %s\n", prayerNames[i], timeStr.c_str());
-        }
-
-        /*
-        for (int i = 0; i < 6; i++) {
-            prayers[i].time = parseTime(doc["data"]["timings"][prayers[i].name].as<String>());
-        }
-        */
-        /*
-        now = time(nullptr);
-        updateCurrentAndNextPrayer();
-
-        http.end();
-        return true;
-    } else {
-        Serial.printf("Error on HTTP request: %s\n", http.errorToString(httpCode).c_str());
-        http.end();
-        return false;
-    }
-}
-*/
-/* Old way of rendering
-void PrayerTimes::setRenderArea(int16_t x, int16_t y, int16_t w, int16_t h) {
-    _renderL = x;
-    _renderT = y;
-    _renderR = w;
-    _renderB = h;
-}
-
-void PrayerTimes::render() {
-    _display.setFont(&FreeSansBold12pt7b);
-    
-    int16_t y = _renderT + 30;
-    int16_t lineHeight = 35;
-
-    _display.setCursor(_renderL, y);
-    _display.print("Fajr: " + fajr);
-    
-    y += lineHeight;
-    _display.setCursor(_renderL, y);
-    _display.print("Dhuhr: " + dhuhr);
-    
-    y += lineHeight;
-    _display.setCursor(_renderL, y);
-    _display.print("Asr: " + asr);
-    
-    y += lineHeight;
-    _display.setCursor(_renderL, y);
-    _display.print("Maghrib: " + maghrib);
-    
-    y += lineHeight;
-    _display.setCursor(_renderL, y);
-    _display.print("Isha: " + isha);
-}
-*/
-
 void PrayerTimes::setRenderArea(int16_t l, int16_t t, int16_t r, int16_t b) {
     _renderL = l;
     _renderT = t;
@@ -229,16 +134,46 @@ void PrayerTimes::setRenderArea(int16_t l, int16_t t, int16_t r, int16_t b) {
     _renderB = b;
 }
 
+void PrayerTimes::renderProgressCircle(int16_t centerX, int16_t centerY, int16_t radius, float progress) {
+    // Circle parameters
+    int16_t strokeWidth = 20;  // Width of the progress arc
+    float startAngle = -90;    // Start at top (-90 degrees)
+    float totalAngle = 360.0f;
+    float progressAngle = startAngle + (progress * totalAngle);
+    
+    // First, draw the background circle in light gray
+    for (int16_t r = radius - strokeWidth + 1; r <= radius; r++) {
+        float angle;
+        for (angle = startAngle; angle <= startAngle + totalAngle; angle += 0.1) {
+            float radAngle = (angle * PI) / 180.0f;
+            int16_t x = centerX + (r * cos(radAngle));
+            int16_t y = centerY + (r * sin(radAngle));
+            _display.drawPixel(x, y, GxEPD_LIGHTGREY);  // Changed to LIGHTGREY
+        }
+    }
+    
+    // Then overlay the progress in black
+    for (int16_t r = radius - strokeWidth + 1; r <= radius; r++) {
+        float angle;
+        for (angle = startAngle; angle <= progressAngle; angle += 0.1) {
+            float radAngle = (angle * PI) / 180.0f;
+            int16_t x = centerX + (r * cos(radAngle));
+            int16_t y = centerY + (r * sin(radAngle));
+            _display.drawPixel(x, y, GxEPD_BLACK);
+        }
+    }
+}
+
 void PrayerTimes::render() {
     // Update current time
     now = time(nullptr);
     updateCurrentAndNextPrayer();
 
-    _display.setFont(&FreeSans9pt7b);
+    _display.setFont(&FreeSansBold9pt7b);
     
     // set your heights
     int16_t yPrayerNames = _renderT + 10;
-    int16_t yPrayerIcons = yPrayerNames + 50;
+    int16_t yPrayerIcons = yPrayerNames + 30;
     int16_t yPrayerTimes = yPrayerIcons + 50;
 
     // x-interval
@@ -250,132 +185,192 @@ void PrayerTimes::render() {
     int16_t boxheight = yPrayerTimes - _renderT;
 
     for (int i = 0; i < 6; i++) {
-        
-        
         if (i == currentPrayerIndex) {
             _display.setTextColor(GxEPD_WHITE);
-            //_display.fillRoundRect(l, y, r - l, 36, 4, GxEPD_BLACK);
-            _display.fillRoundRect(_renderL + i * xInterval, _renderT, xInterval, boxheight, 10, GxEPD_BLACK);
-            //_display.fillRect(_renderL - 5, y - 20, _renderR - 10, lineHeight, GxEPD_BLACK);
-            //_renderL + (i + 1) * xInterval, 
+            _display.fillRoundRect(_renderL + i * xInterval, _renderT - 10, xInterval, boxheight + 20, 10, GxEPD_BLACK);
+            
         } else {
             _display.setTextColor(GxEPD_BLACK);
         }
 
+        /*
         char timeStr[6];
         strftime(timeStr, sizeof(timeStr), "%H:%M", localtime(&prayers[i].time));
+        */
+        
+        char timeStr[8];  // Increased size to accommodate AM/PM
+        strftime(timeStr, sizeof(timeStr), "%I:%M%p", localtime(&prayers[i].time));
+
+        // Convert AM/PM to lowercase and remove leading zero from hour
+        String formattedTime = String(timeStr);
+        if (formattedTime.startsWith("0")) {
+            formattedTime = formattedTime.substring(1);  // Remove leading zero
+        }
+        formattedTime.toLowerCase();  // Convert am/pm to lowercase
+
+        _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerNames, prayers[i].name, CENTER);
+        _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerTimes, formattedTime, CENTER);
 
         /*
-        _display.setCursor(_renderL, y);
-        _display.print(prayers[i].name + ": " + String(timeStr));
-        */
-
          _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerNames, prayers[i].name, CENTER);
          _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerTimes, String(timeStr), CENTER);
          _display.drawInvertedBitmap(_renderL + xInterval * i + xInterval/2 , yPrayerIcons,  epd_bitmap_busiconplaceholder , 32, 32, GxEPD_WHITE);
-
+        */
          //render prayer time icon!
-         
+        // Draw the prayer icon
+        /*
+        const unsigned char* icon = getPrayerIcon(prayers[i].name);
+        _display.drawInvertedBitmap(
+            _renderL + xInterval * i + xInterval/2 - PRAYER_ICON_WIDTH/2,
+            yPrayerIcons,
+            icon,
+            PRAYER_ICON_WIDTH,
+            PRAYER_ICON_HEIGHT,
+            i == currentPrayerIndex ? GxEPD_WHITE : GxEPD_BLACK
+        );
+        */
+
         y += lineHeight;
     }
 
-    // Display countdown to next prayer
+    // Update current time and progress calculation
+    now = time(nullptr);
+    updateCurrentAndNextPrayer();
+        
+    //Next prayer countdown including circular progress bar
+    // Calculate progress for the circle
+    time_t now = time(nullptr);
+    time_t nextPrayerTime = prayers[nextPrayerIndex].time;
+    time_t prevPrayerTime = prayers[currentPrayerIndex].time;
+    time_t totalInterval = nextPrayerTime - prevPrayerTime;
+    time_t elapsed = now - prevPrayerTime;
+    float progress = 1.0f - (float)elapsed / totalInterval;  // Inverted progress (countdown)
+    Serial.printf("Progress: %.2f, Elapsed: %ld, Total: %ld\n", progress, elapsed, totalInterval);
+
+    // Draw the progress circle
+    int16_t circleRadius = 150;  // Adjust size as needed
+    int16_t circleCenterX = _display.width() / 2;
+    int16_t circleCenterY = _display.height() / 4 + 50;
+    
+
+    renderProgressCircle(circleCenterX, circleCenterY, circleRadius, progress);
+
+    // Render countdown text in the center of the circle
+    _display.setFont(&FreeSansBold18pt7b);
     _display.setTextColor(GxEPD_BLACK);
-    _display.setCursor(_renderL, yPrayerTimes + 25);
-    _display.print("Next: " + prayers[nextPrayerIndex].name + " in " + formatCountdown(prayers[nextPrayerIndex].time));
+    _renderer.drawString(circleCenterX, circleCenterY - 20, formatCountdown(prayers[nextPrayerIndex].time), CENTER);
+    _display.setFont(&FreeSans9pt7b);
+    _renderer.drawString(circleCenterX, circleCenterY + 10, "left for", CENTER);
+    _display.setFont(&FreeSansBold18pt7b);
+    _renderer.drawString(circleCenterX, circleCenterY + 50, prayers[currentPrayerIndex].name, CENTER);
+
+    // Add last updated time in top right
+    char timeStr[8];  // Increased size to accommodate AM/PM
+    strftime(timeStr, sizeof(timeStr), "%I:%M%p", localtime(&now));  // %I for 12-hour, %p for AM/PM
+    
+    // Convert AM/PM to lowercase and remove leading zero from hour
+    String formattedTime = String(timeStr);
+    if (formattedTime.startsWith("0")) {
+        formattedTime = formattedTime.substring(1);  // Remove leading zero
+    }
+    formattedTime.toLowerCase();  // Convert am/pm to lowercase
+    _display.setFont(&FreeSansBold18pt7b);
+    _display.setTextColor(GxEPD_BLACK);
+    _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20 , formattedTime, RIGHT);
+
+
 }
 
+time_t PrayerTimes::adjustToNextDay(time_t prayerTime) {
+    // Helper function to adjust prayer time to next day if needed
+    struct tm timeinfo;
+    localtime_r(&prayerTime, &timeinfo);
+    timeinfo.tm_mday++;  // Add one day
+    timeinfo.tm_hour = timeinfo.tm_hour;  // Preserve hour
+    timeinfo.tm_min = timeinfo.tm_min;    // Preserve minute
+    return mktime(&timeinfo);
+}
 
 void PrayerTimes::updateCurrentAndNextPrayer() {
     now = time(nullptr);
-    
-    // Debug print current time
     char currentTimeStr[30];
     strftime(currentTimeStr, sizeof(currentTimeStr), "%Y-%m-%d %H:%M:%S", localtime(&now));
-    Serial.printf("Current time when updating prayers: %s\n", currentTimeStr);
+    Serial.printf("\nUpdating prayers at: %s\n", currentTimeStr);
 
-    currentPrayerIndex = -1;
-    nextPrayerIndex = 0;
-
-    // Debug print all prayer times
-    for (int i = 0; i < 6; i++) {
-        char prayerTimeStr[30];
-        strftime(prayerTimeStr, sizeof(prayerTimeStr), "%Y-%m-%d %H:%M:%S", localtime(&prayers[i].time));
-        Serial.printf("Prayer %s time: %s\n", prayers[i].name, prayerTimeStr);
+    // If we're after Isha (21:46) but before midnight
+    if (now >= prayers[5].time) {
+        currentPrayerIndex = 5;  // Current is Isha
+        nextPrayerIndex = 0;     // Next is tomorrow's Fajr
+        
+        // Get current date at midnight
+        struct tm todayMidnight;
+        localtime_r(&now, &todayMidnight);
+        todayMidnight.tm_hour = 0;
+        todayMidnight.tm_min = 0;
+        todayMidnight.tm_sec = 0;
+        todayMidnight.tm_mday++; // Add one day
+        
+        // Adjust Fajr time to tomorrow
+        struct tm fajrTime;
+        localtime_r(&prayers[0].time, &fajrTime);
+        
+        // Set to tomorrow's date but keep Fajr's time
+        fajrTime.tm_mday = todayMidnight.tm_mday;
+        fajrTime.tm_mon = todayMidnight.tm_mon;
+        fajrTime.tm_year = todayMidnight.tm_year;
+        
+        prayers[0].time = mktime(&fajrTime);
+        
+        char debugStr[30];
+        strftime(debugStr, sizeof(debugStr), "%Y-%m-%d %H:%M:%S", &fajrTime);
+        Serial.printf("Adjusted tomorrow's Fajr to: %s\n", debugStr);
+        
+        return;
     }
 
-    for (int i = 0; i < 6; i++) {
-        if (now < prayers[i].time) {
-            nextPrayerIndex = i;
-            break;
-        }
-        currentPrayerIndex = i;
-    }
-
-    if (currentPrayerIndex == 5) {  // If Isha is current, next is tomorrow's Fajr
-        nextPrayerIndex = 0;
-        // Adjust next prayer time to tomorrow if it's for Fajr
-        time_t fajrTime = prayers[0].time;
-        struct tm fajrTm;
-        localtime_r(&fajrTime, &fajrTm);
-        fajrTm.tm_mday++;  // Add one day
-        prayers[0].time = mktime(&fajrTm);
-    }
-
-    Serial.printf("Current prayer index: %d, Next prayer index: %d\n", 
-                 currentPrayerIndex, nextPrayerIndex);
-
-    // Debug the countdown
-    if (nextPrayerIndex >= 0 && nextPrayerIndex < 6) {
-        time_t diff = prayers[nextPrayerIndex].time - now;
-        int hours = diff / 3600;
-        int minutes = (diff % 3600) / 60;
-        Serial.printf("Time until next prayer: %02d:%02d\n", hours, minutes);
-    }
-}
-
-/*
-
-
-void PrayerTimes::updateCurrentAndNextPrayer() {
-    currentPrayerIndex = -1;
-    nextPrayerIndex = 0;
-
+    // Normal daytime processing - find the next prayer
     for (int i = 0; i < 6; i++) {
         if (now < prayers[i].time) {
             nextPrayerIndex = i;
-            break;
+            currentPrayerIndex = (i > 0) ? i - 1 : 5;
+            
+            // Debug output
+            char nextTime[30];
+            strftime(nextTime, sizeof(nextTime), "%Y-%m-%d %H:%M:%S", localtime(&prayers[nextPrayerIndex].time));
+            Serial.printf("Current: %s, Next: %s at %s\n", 
+                prayers[currentPrayerIndex].name,
+                prayers[nextPrayerIndex].name,
+                nextTime);
+                
+            return;
         }
-        currentPrayerIndex = i;
-    }
-
-    if (currentPrayerIndex == 5) {  // If Isha is current, next is tomorrow's Fajr
-        nextPrayerIndex = 0;
     }
 }
-*/
 
 String PrayerTimes::formatCountdown(time_t target) {
     time_t diff = target - now;
     int hours = diff / 3600;
     int minutes = (diff % 3600) / 60;
-    char buffer[20];
-    snprintf(buffer, sizeof(buffer), "%02d:%02d", hours, minutes);
-    return String(buffer);
+    
+    String result;
+    
+    // Add hours part if there are hours
+    if (hours > 0) {
+        result += String(hours);
+        result += (hours == 1) ? " hr" : " hrs";
+        if (minutes > 0) result += " ";
+    }
+    
+    // Add minutes part if there are minutes or no hours
+    if (minutes > 0 || hours == 0) {
+        result += String(minutes);
+        result += (minutes == 1) ? " min" : " mins";
+    }
+    
+    return result;
 }
-/*
-time_t PrayerTimes::parseTime(const String& timeStr) {
-    struct tm tm;
-    time_t now = time(nullptr);
-    localtime_r(&now, &tm);
-    sscanf(timeStr.c_str(), "%d:%d", &tm.tm_hour, &tm.tm_min);
-    tm.tm_sec = 0;
-    return mktime(&tm);
-}
-*/
 
 time_t PrayerTimes::parseTime(const String& timeStr) {
-    // First, debug print the input
     Serial.printf("Parsing time string: %s\n", timeStr.c_str());
     
     struct tm timeinfo;
@@ -393,19 +388,10 @@ time_t PrayerTimes::parseTime(const String& timeStr) {
     Serial.printf("Parsed hours: %d, minutes: %d\n", hour, minute);
     
     // Get current time for date information
-    time_t now = time(nullptr);
-    if (now < 24 * 60 * 60) {  // Less than Jan 1, 1970 00:00:00 + 1 day
-        Serial.println("Warning: System time not set properly!");
-        return 0;
-    }
+    time_t currentTime = time(nullptr);
+    localtime_r(&currentTime, &timeinfo);
     
-    localtime_r(&now, &timeinfo);
-    
-    // Store original values for comparison
-    int orig_hour = timeinfo.tm_hour;
-    int orig_min = timeinfo.tm_min;
-    
-    // Set the parsed time
+    // Set the parsed time for today
     timeinfo.tm_hour = hour;
     timeinfo.tm_min = minute;
     timeinfo.tm_sec = 0;
@@ -413,45 +399,10 @@ time_t PrayerTimes::parseTime(const String& timeStr) {
     // Convert to time_t
     time_t result = mktime(&timeinfo);
     
-    // If the prayer time has already passed today and it's a morning prayer
-    if (result < now && hour < 12) {
-        Serial.println("Prayer time has passed, adjusting to tomorrow");
-        timeinfo.tm_mday++;  // Add one day
-        result = mktime(&timeinfo);
-    }
-    
     // Debug output
     char buffer[26];
     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
-    Serial.printf("Original time - Hour: %d, Minute: %d\n", orig_hour, orig_min);
-    Serial.printf("Final parsed time: %s\n", buffer);
+    Serial.printf("Parsed time: %s\n", buffer);
     
     return result;
 }
-
-/*
-time_t PrayerTimes::parseTime(const String& timeStr) {
-    struct tm timeinfo;
-    int hour, minute;
-    if (sscanf(timeStr.c_str(), "%d:%d", &hour, &minute) != 2) {
-        Serial.printf("Failed to parse time string: %s\n", timeStr.c_str());
-        return 0;  // Return 0 for invalid time
-    }
-    
-    time_t now = time(nullptr);
-    localtime_r(&now, &timeinfo);
-    
-    timeinfo.tm_hour = hour;
-    timeinfo.tm_min = minute;
-    timeinfo.tm_sec = 0;
-    
-    time_t result = mktime(&timeinfo);
-    
-    char buffer[26];
-    ctime_r(&result, buffer);
-    buffer[24] = '\0';  // Remove newline character
-    Serial.printf("Parsed time: %s from %s\n", buffer, timeStr.c_str());
-    
-    return result;
-}
-*/

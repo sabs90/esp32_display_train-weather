@@ -69,7 +69,7 @@ bool Weather::fetchWeatherData() {
 
 void Weather::setRenderArea(int16_t x, int16_t y, int16_t w, int16_t h) {
     _renderX = x;
-    _renderY = y+ 10;
+    _renderY = y+ 13;
     _renderWidth = w;
     _renderHeight = h;
 }
@@ -141,27 +141,24 @@ void Weather::drawWeatherIcon(int16_t x, int16_t y) {
 
 
 void Weather::render() {
-    _display.setFont(&FreeSansBold12pt7b);
+    _display.setFont(&FreeSansBold18pt7b);
 
-    // Draw weather icon
-    drawWeatherIcon(_renderWidth/2, _renderY);
+    // Create combined string with weather description and temperature
+    //String weatherInfo = weatherDescription + ", " + String(temperature, 1) + "°C";
+    String weatherInfo = String(temperature, 1) + "°C";
 
-    // Draw city name
-    _display.setCursor(_renderX + 5, _renderY);
-    _display.print(cityName);
+    // Convert first letter of weather description to uppercase
+    if (weatherInfo.length() > 0) {
+        weatherInfo.setCharAt(0, toupper(weatherInfo.charAt(0)));
+    }
 
-    // Draw temperature
-    _display.setCursor(_renderX + 5, _renderY + 25);
-    _display.print(String(temperature, 1));
-    _display.print("°C");
+    _display.setCursor(_renderX, _renderY);
+    _display.print(weatherInfo);
 
-    // Draw weather description
-    _display.setCursor(_renderX + 5 , _renderY + 50);
-    _display.print(weatherDescription);
-
-    // Draw humidity
-    _display.setCursor(_renderX + 5, _renderY + 75);
-    _display.print("Humidity: ");
+    /*
+    // Draw humidity separately if still needed
+    _display.setCursor(_renderX + 60, _renderY);
     _display.print(humidity);
     _display.print("%");
+    */
 }
