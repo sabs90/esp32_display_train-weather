@@ -29,6 +29,8 @@
 #include "prayer_times.h"
 #include "time_sync.h"
 #include "status_bar.h"
+#include "mode_manager.h"
+
 
 // copy the constructor from GxEPD2display_selection.h of GxEPD_Example to here
 // and adapt it to the ESP32 Driver wiring, e.g.
@@ -46,7 +48,7 @@ Weather weather(display, renderer);
 PrayerTimes prayerTimes(display, renderer);
 StatusBar statusBar(display, renderer);
 // ALL 3 Apps: IApp* apps[] = {&weather, &prayerTimes, &bus};
-IApp* apps[] = {&weather, &prayerTimes, &statusBar}; //Only weather and prayertimes and status bar. Let's see if this works
+IApp* apps[] = {&weather, &prayerTimes, &statusBar}; 
 
 const int numApps = sizeof(apps) / sizeof(apps[0]); 
 
@@ -87,7 +89,6 @@ void setup() {
     return;
   }
 
-
   // TIME SYNCHRONIZATION
   configTzTime(TIMEZONE, NTP_SERVER_1, NTP_SERVER_2);
   bool timeConfigured = waitForSNTPSync();
@@ -97,23 +98,107 @@ void setup() {
   }
   lastTimeSync = millis();
 
+  //============================================================================================
+  // For development: force a specific mode
+  // Modes: NORMAL - OK, LOW_POWER, NIGHT - OK, CURRENT_PRAYER, ALERT - OK
+  // FIX CURRENT PRAYER
+  //ModeManager::setOverrideMode(DisplayMode::NORMAL);
+  //============================================================================================
+
   Serial.println("setup done");
 }
 
 void loop() {
-  uint32_t start = millis();
+    uint32_t start = millis();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Reconnecting to WiFi");
-    WiFi.reconnect();
-  }
+    // WiFi and time sync checks
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("Reconnecting to WiFi");
+        WiFi.reconnect();
+    }
 
-  if (millis() - lastTimeSync > 60 * 60 * 1000) {
-    Serial.println("Re-synchronizing time");
-    waitForSNTPSync();
-    lastTimeSync = millis();
-  }
+    if (millis() - lastTimeSync > 60 * 60 * 1000) {
+        Serial.println("Re-synchronizing time");
+        waitForSNTPSync();
+        lastTimeSync = millis();
+    }
 
+    // Fetch data for all apps
+    for (int i = 0; i < numApps; i++) {
+      apps[i]->fetchData();
+    } 
+    uint32_t fetchComplete = millis();
+    Serial.printf("Fetched data in %lu millis.\n", fetchComplete - start);
+
+    // Update status bar values
+    uint32_t batVoltage = readBatteryVoltage();
+    uint32_t batPercent = calcBatPercent(batVoltage, CRIT_LOW_BATTERY_VOLTAGE, MAX_BATTERY_VOLTAGE);
+    statusBar.updateValues(time(NULL), WiFi.RSSI(), batPercent);
+
+    // Determine current mode
+    DisplayMode currentMode = ModeManager::determineMode(batPercent, prayerTimes);
+
+    // Use the switch just to determine the render areas and change the apps if needed. 
+    /*
+    switch (currentMode) {
+        case DisplayMode::LOW_POWER:
+            //prayerTimes.fetchData();
+            prayerTimes.setRenderArea(X_MARGIN, Y_MARGIN, 
+                display.width() - X_MARGIN, display.height() - Y_MARGIN);
+            prayerTimes.renderModeSpecific(currentMode);
+            break;
+
+        case DisplayMode::ALERT:
+        case DisplayMode::NIGHT:
+        case DisplayMode::CURRENT_PRAYER:
+            //prayerTimes.fetchData();
+            prayerTimes.setRenderArea(X_MARGIN, Y_MARGIN, 
+                display.width() - X_MARGIN, display.height() - Y_MARGIN);
+            prayerTimes.renderModeSpecific(currentMode);
+            break;
+
+        case DisplayMode::NORMAL:
+        default:
+            // Normal mode - fetch and render all apps
+            for (int i = 0; i < numApps; i++) {
+                apps[i]->fetchData();
+            }
+    } */
+
+    // Render apps
+    
+  // Render
+  initDisplay();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    // margin for ikea frame    
+    
+    // Set render areas for each app. Left, Top, Right, Bottom. 
+    int16_t oneThirdHeight = (display.height() - Y_MARGIN *2) / 3;
+    int16_t marginSpacing = 20;
+    int16_t Statusbarheight = 15;
+
+    //weather.setRenderArea(X_MARGIN, Y_MARGIN, display.width() - X_MARGIN, oneThirdHeight);
+    prayerTimes.setRenderArea(X_MARGIN, display.height()/2 + marginSpacing, display.width() - X_MARGIN, display.height()/2 - Y_MARGIN);
+    bus.setRenderArea(X_MARGIN, Y_MARGIN + 2 * oneThirdHeight - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN - 30);
+    statusBar.setRenderArea(X_MARGIN, display.height() - Y_MARGIN - 20, display.width() - X_MARGIN, display.height() - Y_MARGIN);
+    weather.setRenderArea(X_MARGIN, Y_MARGIN + 5, display.width() /2 , 50);
+
+    // Update current time for prayer times
+    // Render all apps
+    for (int i = 0; i < numApps; i++) {
+      apps[i]->render();
+    }
+  } while (display.nextPage());
+
+    uint32_t renderComplete = millis();
+    Serial.printf("Total time taken: %lu millis.\n", renderComplete - start);
+
+    uint64_t refreshInterval = ModeManager::getRefreshInterval(currentMode, prayerTimes);
+    sleep(refreshInterval > DEEP_SLEEP_THRESHOLD);
+}
+
+/* DELETE OLD CODE - before the modes!
   // Fetch data for all apps
   for (int i = 0; i < numApps; i++) {
     apps[i]->fetchData();
@@ -159,6 +244,7 @@ void loop() {
 
   sleep();
 }
+*/
 
 /* Initialize e-paper display */
 void initDisplay() {
