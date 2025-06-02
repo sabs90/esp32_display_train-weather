@@ -57,7 +57,7 @@ const unsigned long NTP_TIMEOUT = 20000;  // ms
 const uint16_t REFRESH_SCHEDULE[24] = {60,   0,  0,  0,  0,  0,  60, 60,
                                        60, 60, 60, 60, 60, 60, 60, 60,
                                        60,  60, 60, 60, 60, 60, 60,  60};
-const uint32_t DEEP_SLEEP_THRESHOLD = 5 * 60;
+const uint32_t DEEP_SLEEP_THRESHOLD = 5 * 60; //if sleep is >5 mins, deep sleep
 
 // BATTERY
 // To protect the battery upon LOW_BATTERY_VOLTAGE, the display will cease to

@@ -3,7 +3,26 @@
 
 // Initialize static members
 DisplayMode ModeManager::overrideMode = DisplayMode::NORMAL;
+DisplayMode ModeManager::previousMode = DisplayMode::NORMAL; //re:mode checker for full refresh
 bool ModeManager::modeOverrideEnabled = false;
+
+void ModeManager::setOverrideFromSettings(bool enabled, int mode) {
+    modeOverrideEnabled = enabled;
+    if (enabled) {
+        switch (mode) {
+            case 0: overrideMode = DisplayMode::NORMAL; break;
+            case 1: overrideMode = DisplayMode::LOW_POWER; break;
+            case 2: overrideMode = DisplayMode::ALERT; break;
+            case 3: overrideMode = DisplayMode::NIGHT; break;
+            case 4: overrideMode = DisplayMode::CURRENT_PRAYER; break;
+            default: overrideMode = DisplayMode::NORMAL;
+        }
+        Serial.printf("\n=== DEVELOPER MODE OVERRIDE ===\nMode set to: %s\n===============\n", 
+                     getModeString(overrideMode));
+    } else {
+        Serial.println("\n=== DEVELOPER MODE DISABLED ===\n");
+    }
+}
 
 void ModeManager::setOverrideMode(DisplayMode mode) {
     overrideMode = mode;
@@ -39,6 +58,7 @@ DisplayMode ModeManager::determineMode(uint32_t batteryPercent, const PrayerTime
 
     // Normal mode determination logic
     /* Remove battery testing logic 
+    // Fix battery testing logic later - currently it crashes the device for some reason
     if (batteryPercent < 5) {
         Serial.println("Mode: LOW_POWER - Battery critical");
         return DisplayMode::LOW_POWER;
@@ -55,7 +75,8 @@ DisplayMode ModeManager::determineMode(uint32_t batteryPercent, const PrayerTime
         return DisplayMode::CURRENT_PRAYER;
     }
 
-    if (prayerTimes.getMinutesToNextPrayer() <= 15) {
+    if (prayerTimes.getCurrentPrayerIndex() != 1 && prayerTimes.getMinutesToNextPrayer() <= 15) {
+    //if (prayerTimes.getMinutesToNextPrayer() <= 15) {
         Serial.println("Mode: ALERT - Approaching prayer time");
         return DisplayMode::ALERT;
     }
@@ -66,7 +87,8 @@ DisplayMode ModeManager::determineMode(uint32_t batteryPercent, const PrayerTime
 
 bool ModeManager::isApproachingPrayer(const PrayerTimes& prayerTimes) {
     int minutesToNext = prayerTimes.getMinutesToNextPrayer();
-    return minutesToNext <= 60 && minutesToNext > 15;
+    //return minutesToNext <= 60 && minutesToNext > 15;
+    return minutesToNext <= 45 && minutesToNext > 15;
 }
 
 uint64_t ModeManager::getRefreshInterval(DisplayMode mode, const PrayerTimes& prayerTimes) {
@@ -74,23 +96,61 @@ uint64_t ModeManager::getRefreshInterval(DisplayMode mode, const PrayerTimes& pr
         case DisplayMode::LOW_POWER:
             return 24 * 60 * 60; // Once per day
 
-        case DisplayMode::NIGHT:
-            return 0; // No refresh
+        case DisplayMode::NIGHT: {
+            // Calculate time until next Fajr
+            int minsToFajr = prayerTimes.getMinutesToNextPrayer();
+            
+            // Wake up a few minutes before Fajr to ensure we don't miss it
+            const int WAKE_BUFFER_MINS = 20;
+            
+            // If we're close to Fajr, check more frequently
+            if (minsToFajr <= WAKE_BUFFER_MINS) {
+                return 60; // Check every minute when close to Fajr
+            }
+            
+            // Otherwise sleep until shortly before Fajr
+            // But never sleep longer than 30 minutes to handle any edge cases
+            return min((uint64_t)(minsToFajr - WAKE_BUFFER_MINS) * 60, (uint64_t)(30 * 60));
+        }
 
         case DisplayMode::ALERT:
         case DisplayMode::CURRENT_PRAYER:
             return 60; // Every minute
 
         case DisplayMode::NORMAL:
-            // Check if we're approaching next prayer (between 1 hour and 15 minutes)
+            // Check if we're approaching next prayer (between 30 and 15 minutes)
             if (isApproachingPrayer(prayerTimes)) {
                 Serial.println("Normal mode with frequent updates - approaching prayer");
                 return 60; // Update every minute when approaching prayer
             }
-            return 5 * 60; // Otherwise update every 5 minutes
-
+            
+            // Check if current prayer is Sunrise (index 1)
+            if (prayerTimes.getCurrentPrayerIndex() == 1) {
+                int minutesToDhuhr = prayerTimes.getMinutesToNextPrayer();
+                
+                Serial.println("\n=== Sunrise Period Debug Info ===");
+                Serial.printf("Current Prayer Index: %d\n", prayerTimes.getCurrentPrayerIndex());
+                Serial.printf("Next Prayer Index: %d\n", prayerTimes.getNextPrayerIndex());
+                Serial.printf("Minutes until Dhuhr: %d\n", minutesToDhuhr);
+                
+                if (minutesToDhuhr > 60) {
+                    Serial.println("Status: More than 1 hour until Dhuhr");
+                    Serial.println("Action: Setting extended interval (30 minutes)");
+                    return 30 * 60; // Update every 30 minutes
+                } else {
+                    Serial.println("Status: Less than 1 hour until Dhuhr");
+                    Serial.println("Action: Setting medium interval (10 minutes)");
+                    return 10 * 60; // Update every 10 minutes when within 1 hour of dhuhr
+                }
+            } else {
+                Serial.println("\n=== Normal Mode Debug Info ===");
+                Serial.printf("Current Prayer Index: %d\n", prayerTimes.getCurrentPrayerIndex());
+                Serial.printf("Next Prayer Index: %d\n", prayerTimes.getNextPrayerIndex());
+                Serial.println("Action: Setting default interval (10 minutes)");
+            }
         default:
-            return 5 * 60;
+            return 10 * 60; //every 10 min update
+            //return 60; //for rakasib
     }
 }
 

@@ -22,10 +22,13 @@
 #include "prayer_icons.h"
 #include "display_modes.h"
 #include "mode_manager.h"
+#include "quran_verses.h"
+#include "night_bitmap.h"
 
 
-PrayerTimes::PrayerTimes(GxEPD2_GFX& display, Renderer& renderer)
-    : _display(display), _renderer(renderer), _renderL(0), _renderT(0), _renderR(0), _renderB(0) {
+PrayerTimes::PrayerTimes(GxEPD2_GFX& display, Renderer& renderer, SettingsServer& settingsServer)
+    : _display(display), _renderer(renderer), _settingsServer(settingsServer), 
+      _renderL(0), _renderT(0), _renderR(0), _renderB(0) {
     prayers[0] = {"Fajr", 0};
     prayers[1] = {"Sunrise", 0};
     prayers[2] = {"Dhuhr", 0};
@@ -33,6 +36,7 @@ PrayerTimes::PrayerTimes(GxEPD2_GFX& display, Renderer& renderer)
     prayers[4] = {"Maghrib", 0};
     prayers[5] = {"Isha", 0};
 }
+
 bool PrayerTimes::fetchData() {
     return fetchPrayerTimes();
 }
@@ -43,6 +47,9 @@ bool PrayerTimes::fetchPrayerTimes() {
 
     client.setInsecure();
 
+    // Get current settings
+    const auto& settings = _settingsServer.getSettings();
+
     // Ensure we're using today's date in the API call
     time_t now = time(nullptr);
     struct tm timeinfo;
@@ -51,12 +58,12 @@ bool PrayerTimes::fetchPrayerTimes() {
     strftime(dateStr, sizeof(dateStr), "%d-%m-%Y", &timeinfo);
 
     String url = "https://api.aladhan.com/v1/timings/" + String(dateStr);
-    url += "?latitude=-33.8688";
-    url += "&longitude=151.2093";
-    url += "&method=3";
-    url += "&school=1";
+    url += "?latitude=" + String(settings.latitude, 4);
+    url += "&longitude=" + String(settings.longitude, 4);
+    url += "&method=" + String(settings.calculationMethod);
+    url += "&school=" + String(settings.school);
     url += "&adjustment=1";
-    
+
     Serial.println("Requesting URL: " + url);
     
     if (!http.begin(client, url)) {
@@ -95,6 +102,13 @@ bool PrayerTimes::fetchPrayerTimes() {
             http.end();
             return false;
         }
+        
+        // Extract Hijri date
+        const char* hijriDay = doc["data"]["date"]["hijri"]["day"];
+        const char* hijriMonth = doc["data"]["date"]["hijri"]["month"]["en"];
+        hijriDate = String(hijriDay) + " " + String(hijriMonth);
+
+        Serial.printf("Hijri date: %s\n", hijriDate.c_str());
 
         // Debug: Print current system time
         now = time(nullptr);
@@ -107,8 +121,15 @@ bool PrayerTimes::fetchPrayerTimes() {
         for (int i = 0; i < 6; i++) {
             String timeStr = doc["data"]["timings"][prayerNames[i]].as<String>();
             prayers[i].name = prayerNames[i];
-            prayers[i].time = parseTime(timeStr);
+            //prayers[i].time = parseTime(timeStr);
             
+            // Special handling for Isha time if override is enabled
+            if (prayers[i].name == "Isha") {
+                prayers[i].time = getIshaTime(timeStr);
+            } else {
+                prayers[i].time = parseTime(timeStr);
+            }
+
             // Debug: Print raw and parsed times
             char prayerTimeStr[30];
             strftime(prayerTimeStr, sizeof(prayerTimeStr), "%Y-%m-%d %H:%M:%S", localtime(&prayers[i].time));
@@ -140,46 +161,6 @@ String PrayerTimes::formatTime(time_t t) {
     }
     formatted.toLowerCase();
     return formatted;
-}
-/*
-void PrayerTimes::renderModeSpecific(DisplayMode mode) {
-    switch (mode) {
-        case DisplayMode::LOW_POWER:
-            renderLowPowerMode();
-            break;
-        case DisplayMode::ALERT:
-            renderAlertMode();
-            break;
-        case DisplayMode::NIGHT:
-            renderNightMode();
-            break;
-        case DisplayMode::CURRENT_PRAYER:
-            renderCurrentPrayerMode();
-            break;
-        default:
-            render(); // Normal render
-            break;
-    }
-}
-*/
-
-void PrayerTimes::renderModeSpecific(DisplayMode mode) {
-    switch (mode) {
-        case DisplayMode::LOW_POWER:
-            renderLowPowerMode();
-            break;
-        case DisplayMode::ALERT:
-            renderAlertMode();
-            break;
-        case DisplayMode::NIGHT:
-            renderNightMode();
-            break;
-        case DisplayMode::CURRENT_PRAYER:
-        case DisplayMode::NORMAL:
-        default:
-            render(); // Handle both normal and current prayer modes
-            break;
-    }
 }
 
 void PrayerTimes::setRenderArea(int16_t l, int16_t t, int16_t r, int16_t b) {
@@ -220,120 +201,6 @@ void PrayerTimes::renderProgressCircle(int16_t centerX, int16_t centerY, int16_t
         }
     }
 }
-
-/* DELETE
-void PrayerTimes::render() {
-    // Update current time
-    now = time(nullptr);
-    updateCurrentAndNextPrayer();
-
-    _display.setFont(&FreeSansBold9pt7b);
-    
-    // set your heights
-    int16_t yPrayerNames = _renderT + 10;
-    int16_t yPrayerIcons = yPrayerNames + 30;
-    int16_t yPrayerTimes = yPrayerIcons + 50;
-
-    // x-interval
-    int16_t xInterval = (_renderR - _renderL) / 6; //make this dynamic re: #prayer times we're looking at. Although prob not needed. 
-    int16_t xMarginPrayerRender = 3;
-
-    int16_t y = _renderT + 30; //delete this crap
-    int16_t lineHeight = 35; // delete this crap
-    int16_t boxheight = yPrayerTimes - _renderT;
-
-    for (int i = 0; i < 6; i++) {
-        if (i == currentPrayerIndex) {
-            _display.setTextColor(GxEPD_WHITE);
-            _display.fillRoundRect(_renderL + i * xInterval, _renderT - 10, xInterval, boxheight + 20, 10, GxEPD_BLACK);
-            
-        } else {
-            _display.setTextColor(GxEPD_BLACK);
-        }
-
-        /*
-        char timeStr[6];
-        strftime(timeStr, sizeof(timeStr), "%H:%M", localtime(&prayers[i].time));
-        */
-        /* DELETE
-        char timeStr[8];  // Increased size to accommodate AM/PM
-        strftime(timeStr, sizeof(timeStr), "%I:%M%p", localtime(&prayers[i].time));
-
-        // Convert AM/PM to lowercase and remove leading zero from hour
-        String formattedTime = String(timeStr);
-        if (formattedTime.startsWith("0")) {
-            formattedTime = formattedTime.substring(1);  // Remove leading zero
-        }
-        formattedTime.toLowerCase();  // Convert am/pm to lowercase
-
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerNames, prayers[i].name, CENTER);
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerTimes, formattedTime, CENTER);
-
-        /*
-         _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerNames, prayers[i].name, CENTER);
-         _renderer.drawString(_renderL + xInterval * i + xInterval/2, yPrayerTimes, String(timeStr), CENTER);
-         _display.drawInvertedBitmap(_renderL + xInterval * i + xInterval/2 , yPrayerIcons,  epd_bitmap_busiconplaceholder , 32, 32, GxEPD_WHITE);
-        */
-         //render prayer time icon!
-        // Draw the prayer icon
-        /*
-        const unsigned char* icon = getPrayerIcon(prayers[i].name);
-        _display.drawInvertedBitmap(
-            _renderL + xInterval * i + xInterval/2 - PRAYER_ICON_WIDTH/2,
-            yPrayerIcons,
-            icon,
-            PRAYER_ICON_WIDTH,
-            PRAYER_ICON_HEIGHT,
-            i == currentPrayerIndex ? GxEPD_WHITE : GxEPD_BLACK
-        );
-        */
-        /* DELETE
-        y += lineHeight;
-    }*/
-
-/*
-void PrayerTimes::render() {
-    render(DisplayMode::NORMAL);  // Default implementation calls the mode-specific version
-    
-}
-*/
-
-// =====================================================
-
-// In prayer_times.cpp, modify the render() function:
-/*v2
-void PrayerTimes::render() {
-    // Update current time
-    now = time(nullptr);
-    updateCurrentAndNextPrayer();
-
-    // Get current display mode from ModeManager
-    DisplayMode currentMode = ModeManager::determineMode(0, *this); // Pass 0 as battery since we don't need it here
-
-    // Call appropriate render function based on mode
-    switch (currentMode) {
-        case DisplayMode::LOW_POWER:
-            renderLowPowerMode();
-            break;
-        case DisplayMode::ALERT:
-            renderAlertMode();
-            break;
-        case DisplayMode::NIGHT:
-            renderNightMode();
-            break;
-        case DisplayMode::CURRENT_PRAYER:
-        case DisplayMode::NORMAL:
-            //renderCurrentPrayerMode();
-            renderPrayerMode();
-            break;
-        //case DisplayMode::NORMAL:
-        default:
-            //renderNormalMode();
-            renderPrayerMode();
-            break;
-    }
-}
-*/
 
 void PrayerTimes::render() {
     static DisplayMode lastMode = DisplayMode::NORMAL;
@@ -386,9 +253,7 @@ void PrayerTimes::renderPrayerMode() {
     int16_t centerY = _display.height() / 4 + 50;
     int16_t countdownY = isCurrentPrayerMode ? _renderT + 120 : centerY - 20;
 
-    // Render prayer timeline with appropriate highlight
-    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, 
-        isCurrentPrayerMode ? nextPrayerIndex : currentPrayerIndex);
+    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, currentPrayerIndex);
 
     // Normal mode shows progress circle, current prayer mode doesn't
     if (!isCurrentPrayerMode) {
@@ -413,7 +278,6 @@ void PrayerTimes::renderPrayerMode() {
         
         _display.setFont(&FreeSansBold18pt7b);
         _renderer.drawString(centerX, centerY + 40, "Started at", CENTER);
-        //String startTime = "Started at " + formatTime(prayers[currentPrayerIndex].time);
         String startTime = formatTime(prayers[currentPrayerIndex].time);
         _display.setFont(&FreeSansBold24pt7b);
         _renderer.drawString(centerX, centerY + 100, startTime, CENTER);
@@ -424,248 +288,31 @@ void PrayerTimes::renderPrayerMode() {
         _renderer.drawString(centerX, centerY - 20, 
                            formatCountdown(prayers[nextPrayerIndex].time), CENTER);
         _display.setFont(&FreeSans9pt7b);
-        _renderer.drawString(centerX, centerY + 10, "left for", CENTER);
-        _display.setFont(&FreeSansBold18pt7b);
-        _renderer.drawString(centerX, centerY + 50, 
-                           prayers[currentPrayerIndex].name, CENTER);
-    }
 
-    // Add current time (common to both modes)
-    String formattedTime = formatTime(now);
-    _display.setFont(&FreeSansBold18pt7b);
-    _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20, 
-                        formattedTime, RIGHT);
-}
 
-// Add new function for normal mode rendering (extracted from existing render code)
-/* v6
-void PrayerTimes::renderNormalMode() {
-    // Initialize base font and layout parameters
-    _display.setFont(&FreeSansBold9pt7b);
-
-    // Render prayer timeline
-    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, currentPrayerIndex);
-
-    // Calculate progress for the circle
-    time_t nextPrayerTime = prayers[nextPrayerIndex].time;
-    time_t prevPrayerTime = prayers[currentPrayerIndex].time;
-    time_t totalInterval = nextPrayerTime - prevPrayerTime;
-    time_t elapsed = now - prevPrayerTime;
-    float progress = 1.0f - (float)elapsed / totalInterval;
-
-    // Draw the progress circle
-    int16_t circleRadius = 150;
-    int16_t circleCenterX = _display.width() / 2;
-    int16_t circleCenterY = _display.height() / 4 + 50;
-    renderProgressCircle(circleCenterX, circleCenterY, circleRadius, progress);
-
-    // Render countdown text
-    _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(circleCenterX, circleCenterY - 20, 
-                        formatCountdown(prayers[nextPrayerIndex].time), CENTER);
-    _display.setFont(&FreeSans9pt7b);
-    _renderer.drawString(circleCenterX, circleCenterY + 10, "left for", CENTER);
-    _display.setFont(&FreeSansBold18pt7b);
-    _renderer.drawString(circleCenterX, circleCenterY + 50, 
-                        prayers[currentPrayerIndex].name, CENTER);
-
-    // Add current time
-    String formattedTime = formatTime(now);
-    _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20, 
-                        formattedTime, RIGHT);
-}
-*/
-
-// Add new function for current prayer mode rendering
-void PrayerTimes::renderCurrentPrayerMode() {
-    if (currentPrayerIndex < 0) return;
-
-    // Draw dome outline
-    drawDomeOutline(_renderL, _renderT, _renderWidth, _renderHeight);
-
-    // Draw prayer timeline with next prayer highlighted
-    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, nextPrayerIndex);
-
-    // Draw large text with current prayer info
-    _display.setFont(&FreeSansBold24pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(_renderL + (_renderR - _renderL)/2, 
-                        _renderT + 120, prayers[currentPrayerIndex].name, CENTER);
-    
-    _display.setFont(&FreeSansBold18pt7b);
-    String startTime = "Started at " + formatTime(prayers[currentPrayerIndex].time);
-    _renderer.drawString(_renderL + (_renderR - _renderL)/2, 
-                        _renderT + 170, startTime, CENTER);
-    
-    // Add current time
-    String formattedTime = formatTime(now);
-    _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20, 
-                        formattedTime, RIGHT);
-}
-
-// =====================================================
-
-/* v5
-void PrayerTimes::render(DisplayMode mode) {
-    // Update current time
-    now = time(nullptr);
-    updateCurrentAndNextPrayer();
-
-    // Initialize base font and layout parameters
-    _display.setFont(&FreeSansBold9pt7b);
-
-    // Render prayer timeline
-    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, 
-        (mode == DisplayMode::CURRENT_PRAYER) ? nextPrayerIndex : currentPrayerIndex);
-    /*
-    // Set heights for prayer display
-    int16_t yPrayerNames = _renderT + 10;
-    int16_t yPrayerIcons = yPrayerNames + 30;
-    int16_t yPrayerTimes = yPrayerIcons + 50;
-    int16_t xInterval = (_renderR - _renderL) / 6;
-    int16_t boxheight = yPrayerTimes - _renderT;
-    
-    DisplayMode currentMode = DisplayMode::NORMAL; // This should be passed in as a parameter
-    //int prayerToHighlight = isCurrentPrayerMode ? nextPrayerIndex : currentPrayerIndex;
-    int prayerToHighlight = (mode == DisplayMode::CURRENT_PRAYER) ? nextPrayerIndex : currentPrayerIndex;
-
-    // Render prayer timeline
-    for (int i = 0; i < 6; i++) {
-        if (i == prayerToHighlight) {
-            _display.setTextColor(GxEPD_WHITE);
-            _display.fillRoundRect(_renderL + i * xInterval, _renderT - 10, 
-                                 xInterval, boxheight + 20, 10, GxEPD_BLACK);
+        // Special handling for Sunrise
+        if (prayers[currentPrayerIndex].name == "Sunrise") {
+            _renderer.drawString(centerX, centerY + 10, "until", CENTER);
+            _display.setFont(&FreeSansBold18pt7b);
+            _renderer.drawString(centerX, centerY + 50, 
+                            prayers[nextPrayerIndex].name, CENTER);
         } else {
-            _display.setTextColor(GxEPD_BLACK);
+            _renderer.drawString(centerX, centerY + 10, "left for", CENTER);
+            _display.setFont(&FreeSansBold18pt7b);
+            _renderer.drawString(centerX, centerY + 50, 
+                            prayers[currentPrayerIndex].name, CENTER);
         }
-
-        // Format time string
-        String formattedTime = formatTime(prayers[i].time);
-
-        // Use larger font for current prayer mode
-        if (mode == DisplayMode::CURRENT_PRAYER) {
-            _display.setFont(&FreeSansBold12pt7b);
-        }
-
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, 
-                           yPrayerNames, prayers[i].name, CENTER);
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, 
-                           yPrayerTimes, formattedTime, CENTER);
-
-        // Reset to normal font size
-        if (mode == DisplayMode::CURRENT_PRAYER) {
-            _display.setFont(&FreeSansBold9pt7b);
-        }
-    }
-    */
-/*
-    // For normal mode only: render progress circle and countdown
-    if (mode != DisplayMode::CURRENT_PRAYER) {
-        // Calculate progress for the circle
-        time_t nextPrayerTime = prayers[nextPrayerIndex].time;
-        time_t prevPrayerTime = prayers[currentPrayerIndex].time;
-        time_t totalInterval = nextPrayerTime - prevPrayerTime;
-        time_t elapsed = now - prevPrayerTime;
-        float progress = 1.0f - (float)elapsed / totalInterval;
-
-        // Draw the progress circle
-        int16_t circleRadius = 150;
-        int16_t circleCenterX = _display.width() / 2;
-        int16_t circleCenterY = _display.height() / 4 + 50;
-        renderProgressCircle(circleCenterX, circleCenterY, circleRadius, progress);
-
-        // Render countdown text
-        _display.setFont(&FreeSansBold18pt7b);
-        _display.setTextColor(GxEPD_BLACK);
-        _renderer.drawString(circleCenterX, circleCenterY - 20, 
-                           formatCountdown(prayers[nextPrayerIndex].time), CENTER);
-        _display.setFont(&FreeSans9pt7b);
-        _renderer.drawString(circleCenterX, circleCenterY + 10, "left for", CENTER);
-        _display.setFont(&FreeSansBold18pt7b);
-        _renderer.drawString(circleCenterX, circleCenterY + 50, 
-                           prayers[currentPrayerIndex].name, CENTER);
-    } else {
-        // Current prayer mode: show large text with current prayer info
-        _display.setFont(&FreeSansBold24pt7b);
-        _display.setTextColor(GxEPD_BLACK);
-        _renderer.drawString(_renderL + (_renderR - _renderL)/2, 
-                           _renderT + 120, prayers[currentPrayerIndex].name, CENTER);
-        
-        _display.setFont(&FreeSansBold18pt7b);
-        String startTime = "Started at " + formatTime(prayers[currentPrayerIndex].time);
-        _renderer.drawString(_renderL + (_renderR - _renderL)/2, 
-                           _renderT + 170, startTime, CENTER);
+                           
     }
 
-    // Add current time in top right (common to both modes)
-    char timeStr[8];
-    strftime(timeStr, sizeof(timeStr), "%I:%M%p", localtime(&now));
-    String formattedTime = String(timeStr);
-    if (formattedTime.startsWith("0")) {
-        formattedTime = formattedTime.substring(1);
-    }
-    formattedTime.toLowerCase();
-    
+   // Hijri calendar
     _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
     _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20, 
-                        formattedTime, RIGHT);
+                        hijriDate, RIGHT);
+
+    // Add daily verse (common to both modes)
+    renderDailyVerse();
 }
-*/
-
-/*
-    // Update current time and progress calculation
-    now = time(nullptr);
-    updateCurrentAndNextPrayer();
-        
-    //Next prayer countdown including circular progress bar
-    // Calculate progress for the circle
-    time_t now = time(nullptr);
-    time_t nextPrayerTime = prayers[nextPrayerIndex].time;
-    time_t prevPrayerTime = prayers[currentPrayerIndex].time;
-    time_t totalInterval = nextPrayerTime - prevPrayerTime;
-    time_t elapsed = now - prevPrayerTime;
-    float progress = 1.0f - (float)elapsed / totalInterval;  // Inverted progress (countdown)
-    Serial.printf("Progress: %.2f, Elapsed: %ld, Total: %ld\n", progress, elapsed, totalInterval);
-
-    // Draw the progress circle
-    int16_t circleRadius = 150;  // Adjust size as needed
-    int16_t circleCenterX = _display.width() / 2;
-    int16_t circleCenterY = _display.height() / 4 + 50;
-    
-
-    renderProgressCircle(circleCenterX, circleCenterY, circleRadius, progress);
-
-    // Render countdown text in the center of the circle
-    _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(circleCenterX, circleCenterY - 20, formatCountdown(prayers[nextPrayerIndex].time), CENTER);
-    _display.setFont(&FreeSans9pt7b);
-    _renderer.drawString(circleCenterX, circleCenterY + 10, "left for", CENTER);
-    _display.setFont(&FreeSansBold18pt7b);
-    _renderer.drawString(circleCenterX, circleCenterY + 50, prayers[currentPrayerIndex].name, CENTER);
-
-    // Add last updated time in top right
-    char timeStr[8];  // Increased size to accommodate AM/PM
-    strftime(timeStr, sizeof(timeStr), "%I:%M%p", localtime(&now));  // %I for 12-hour, %p for AM/PM
-    
-    // Convert AM/PM to lowercase and remove leading zero from hour
-    String formattedTime = String(timeStr);
-    if (formattedTime.startsWith("0")) {
-        formattedTime = formattedTime.substring(1);  // Remove leading zero
-    }
-    formattedTime.toLowerCase();  // Convert am/pm to lowercase
-    _display.setFont(&FreeSansBold18pt7b);
-    _display.setTextColor(GxEPD_BLACK);
-    _renderer.drawString(_display.width() - X_MARGIN, Y_MARGIN + 20 , formattedTime, RIGHT);
-
-
-} */
 
 void PrayerTimes::renderAlertMode() {
     // Fill entire screen with black background
@@ -681,7 +328,6 @@ void PrayerTimes::renderAlertMode() {
     
     // Draw large countdown
     _display.setFont(&FreeSansBold24pt7b);
-    //_display.setTextColor(GxEPD_BLACK);
     String countText = String(minutesLeft) + " MINUTES";
 
     uint32_t topborder = _display.height() / 4 - 25;
@@ -699,16 +345,14 @@ void PrayerTimes::renderAlertMode() {
     _display.setFont(&FreeSansBold18pt7b);
     _renderer.drawString(_renderL + _renderWidth/2, topborder + 180, 
                         formatTime(prayers[nextPrayerIndex].time), CENTER);
-    /*ß
-    // Draw prayer timeline with inverted colors
-    renderPrayerTimeline(_renderL + 40, _renderT + 350, _renderWidth - 80, nextPrayerIndex, true); */
 
     // Render prayer timeline
     _display.setFont(&FreeSansBold9pt7b);
-    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, currentPrayerIndex);
+    renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, currentPrayerIndex, true);
 
-    //renderPrayerTimeline(_renderL, _renderT, _renderR - _renderL, 
-    //    (mode == DisplayMode::CURRENT_PRAYER) ? nextPrayerIndex : currentPrayerIndex);
+
+    // Add verse display with inverted colors
+    renderDailyVerse(true);
 }
 
 void PrayerTimes::renderNightMode() {
@@ -729,34 +373,20 @@ void PrayerTimes::renderNightMode() {
     _renderer.drawString(_renderL + (_renderR - _renderL)/2, _display.height()/4 , "Isha started at ", CENTER);
     _renderer.drawString(_renderL + (_renderR - _renderL)/2, _display.height()/4 + 50, ishaMessage, CENTER);
     
-    // Draw decorative night sky elements
-    int moonCenterX = _renderL + (_renderR - _renderL)/2;
-    int moonCenterY = _renderT + (_renderB - _renderT)/2;
-    int moonRadius = 40;
+    // Calculate center position for the bitmap
+    int16_t bitmapX = (_display.width() - NIGHT_BITMAP_WIDTH) / 2;
+    int16_t bitmapY = (_display.height() - NIGHT_BITMAP_HEIGHT) / 2 - 50;
     
-    // Draw moon outline (inverted colors for night mode)
-    _display.fillCircle(moonCenterX, moonCenterY, moonRadius, GxEPD_WHITE);
-    _display.fillCircle(moonCenterX + 10, moonCenterY - 5, moonRadius - 5, GxEPD_BLACK); // Create crescent effect
+    // Draw the bitmap in white on black background
+    _display.drawBitmap(
+        bitmapX, 
+        bitmapY,
+        night_bitmap,
+        NIGHT_BITMAP_WIDTH,
+        NIGHT_BITMAP_HEIGHT,
+        GxEPD_WHITE  // Foreground color
+    );
     
-    // Draw stars (white plus shapes)
-    const int numStars = 20;
-    for(int i = 0; i < numStars; i++) {
-        int starX = _renderL + 50 + (i * ((_renderR - _renderL) - 100) / numStars);
-        int starY = _renderT + 5 + ((i % 3) * 50);
-        
-        // Draw plus shape for stars
-        _display.drawFastHLine(starX - 3, starY, 7, GxEPD_WHITE);
-        _display.drawFastVLine(starX, starY - 3, 7, GxEPD_WHITE);
-    }
-
-    // Draw cloud-like formations at sides (white)
-    int cloudY = moonCenterY + moonRadius + 20;
-    for(int i = 0; i < 3; i++) {
-        // Left cloud formation
-        _display.fillRect(_renderL + (i * 30), cloudY + (i * 15), 80, 5, GxEPD_WHITE);
-        // Right cloud formation
-        _display.fillRect(_renderR - 80 - (i * 30), cloudY + (i * 15), 80, 5, GxEPD_WHITE);
-    }
 
     // Draw next prayer info at bottom
     _display.setFont(&FreeSansBold18pt7b);
@@ -770,68 +400,6 @@ void PrayerTimes::renderLowPowerMode() {
     // Simple black and white display showing just prayer times
     render(); // For now, just use normal render
 }
-
-/* DELETE  
-void PrayerTimes::renderCurrentPrayerMode() {
-    if (currentPrayerIndex < 0) return;
-
-    // Draw dome outline
-    drawDomeOutline(_renderL, _renderT, _renderWidth, _renderHeight);
-
-    // Draw date and time at top
-    char dateStr[32];
-    time_t now = time(NULL);
-    struct tm *timeinfo = localtime(&now);
-    strftime(dateStr, sizeof(dateStr), "%d %b %y", timeinfo);
-    
-    _display.setFont(&FreeSans9pt7b);
-    _renderer.drawString(_renderL + 10, _renderT + 20, dateStr, LEFT);
-    
-    strftime(dateStr, sizeof(dateStr), "%I:%M %p", timeinfo);
-    _renderer.drawString(_renderR - 10, _renderT + 20, dateStr, RIGHT);
-
-    // Draw prayer name in dome
-    _display.setFont(&FreeSansBold24pt7b);
-    _renderer.drawString(_renderL + _renderWidth/2, _renderT + 120, 
-                        prayers[currentPrayerIndex].name, CENTER);
-
-    // Draw "Pray now"
-    _display.setFont(&FreeSansBold18pt7b);
-    _renderer.drawString(_renderL + _renderWidth/2, _renderT + 170, 
-                        "Pray now", CENTER);
-
-    // Draw prayer time
-    _renderer.drawString(_renderL + _renderWidth/2, _renderT + 220, 
-                        formatTime(prayers[currentPrayerIndex].time), CENTER);
-
-    // Draw prayer timeline
-    renderPrayerTimeline(_renderL + 40, _renderT + 350, 
-                        _renderWidth - 80, currentPrayerIndex);
-
-    // Draw random hadith
-    _display.setFont(&FreeSans9pt7b);
-    const char* hadith = "Abdullah ibn Mas'ud reported: I said, \"O Messenger of "
-                        "Allah, which deeds are best?\" The Messenger of Allah, "
-                        "peace and blessings be upon him, said, \"Prayer on time.\"";
-    
-    _renderer.drawMultiLnString(_renderL + _renderWidth/2, _renderT + 400, 
-                               hadith, CENTER, _renderWidth - 80, 4, 20);
-    
-    _renderer.drawString(_renderL + _renderWidth/2, _renderT + 460, 
-                        "al-Mu'jam al-Kabir 9687", CENTER);
-
-    // Draw weather info at bottom
-    _display.setFont(&FreeSans9pt7b);
-    char weatherStr[32];
-    snprintf(weatherStr, sizeof(weatherStr), "34 C, Sunny");
-    _renderer.drawString(_renderL + 10, _renderB - 10, weatherStr, LEFT);
-
-    // Draw battery and wifi at bottom right
-    char statusStr[32];
-    snprintf(statusStr, sizeof(statusStr), "%d Dec %02d:%02d", 
-            timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min);
-    _renderer.drawString(_renderR - 10, _renderB - 10, statusStr, RIGHT);
-} */
 
 time_t PrayerTimes::adjustToNextDay(time_t prayerTime) {
     // Helper function to adjust prayer time to next day if needed
@@ -989,141 +557,129 @@ void PrayerTimes::drawDomeOutline(int16_t x, int16_t y, int16_t w, int16_t h) {
     _display.drawFastVLine(startX + domeWidth, y + domeHeight, h/4, GxEPD_BLACK);
 }
 
-//void PrayerTimes::renderPrayerTimeline(int16_t x, int16_t y, int16_t w, int currentPrayer) {
-
 void PrayerTimes::renderPrayerTimeline(int16_t x, int16_t y, int16_t w, int currentPrayer, bool invertColors) {
-    // Set heights for prayer display
-    y = y + 30;
-    int16_t yPrayerNames = y + 10;
-    int16_t yPrayerIcons = yPrayerNames + 30;
-    int16_t yPrayerTimes = yPrayerIcons + 50;
+    // Constants for layout
+    const int16_t VERTICAL_OFFSET = 30;
+    const int16_t NAME_MARGIN = 10;
+    const int16_t ICON_SPACING = 20;
+    const int16_t TIME_SPACING = 50;
+    const int16_t HIGHLIGHT_PADDING = 10;
+    const int16_t HIGHLIGHT_RADIUS = 10;
+    const int16_t OUTLINE_THICKNESS = 2;
+    
+    // Calculate positions
+    y += VERTICAL_OFFSET;
+    int16_t yPrayerNames = y + NAME_MARGIN;
+    int16_t yPrayerIcons = yPrayerNames + ICON_SPACING;  // Position icons below names
+    int16_t yPrayerTimes = yPrayerIcons + PRAYER_ICON_HEIGHT + 20;  // Position times below icons
     int16_t xInterval = w / 6;
-    int16_t boxheight = yPrayerTimes - y;
+    int16_t boxheight = yPrayerTimes - y + 20;  // Increased height to accommodate icons
 
-    // Render prayer timeline
+    // Render each prayer slot
     for (int i = 0; i < 6; i++) {
-        if (i == currentPrayer) {
-            _display.setTextColor(invertColors ? GxEPD_BLACK : GxEPD_WHITE);
-            _display.fillRoundRect(x + i * xInterval, y - 10, 
-                                 xInterval, boxheight + 20, 10, 
-                                 invertColors ? GxEPD_WHITE : GxEPD_BLACK);
-        } else {
-            _display.setTextColor(invertColors ? GxEPD_WHITE : GxEPD_BLACK);
-        }
+        bool isHighlighted = (i == currentPrayer);
+        int16_t xCenter = x + (xInterval * i) + (xInterval / 2);
+        int16_t xLeft = x + (xInterval * i);
 
-        // Format time string
-        String formattedTime = formatTime(prayers[i].time);
-
-        // Draw stringsß
-        _renderer.drawString(x + xInterval * i + xInterval/2, 
-                           yPrayerNames, prayers[i].name, CENTER);
-        _renderer.drawString(x + xInterval * i + xInterval/2, 
-                           yPrayerTimes, formattedTime, CENTER);
-    }
-
-    // Reset text color
-    _display.setTextColor(GxEPD_BLACK);
-
-
-    // ==========================================================
-    /*
-    // Initialize base font and layout parameters
-    _display.setFont(&FreeSansBold9pt7b);
-    
-    // Set heights for prayer display
-    int16_t yPrayerNames = _renderT + 10;
-    int16_t yPrayerIcons = yPrayerNames + 30;
-    int16_t yPrayerTimes = yPrayerIcons + 50;
-    int16_t xInterval = (_renderR - _renderL) / 6;
-    int16_t boxheight = yPrayerTimes - _renderT;
-    
-    DisplayMode currentMode = DisplayMode::NORMAL; // This should be passed in as a parameter
-    //int prayerToHighlight = isCurrentPrayerMode ? nextPrayerIndex : currentPrayerIndex;
-    int prayerToHighlight = (mode == DisplayMode::CURRENT_PRAYER) ? nextPrayerIndex : currentPrayerIndex;
-
-    // Render prayer timeline
-    for (int i = 0; i < 6; i++) {
-        if (i == prayerToHighlight) {
-            _display.setTextColor(GxEPD_WHITE);
-            _display.fillRoundRect(_renderL + i * xInterval, _renderT - 10, 
-                                 xInterval, boxheight + 20, 10, GxEPD_BLACK);
-        } else {
-            _display.setTextColor(GxEPD_BLACK);
-        }
-
-        // Format time string
-        String formattedTime = formatTime(prayers[i].time);
-
-        // Use larger font for current prayer mode
-        if (mode == DisplayMode::CURRENT_PRAYER) {
-            _display.setFont(&FreeSansBold12pt7b);
-        }
-
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, 
-                           yPrayerNames, prayers[i].name, CENTER);
-        _renderer.drawString(_renderL + xInterval * i + xInterval/2, 
-                           yPrayerTimes, formattedTime, CENTER);
-
-        // Reset to normal font size
-        if (mode == DisplayMode::CURRENT_PRAYER) {
-            _display.setFont(&FreeSansBold9pt7b);
-        }
-    }
-    */
-
-    //===================================================================
-
-    /*
-    const int iconSize = 32;
-    const int timelineHeight = 40;
-    const int spacing = (w - (5 * iconSize)) / 4; // Space between icons
-    
-    // Draw the timeline line
-    _display.drawFastHLine(x, y + iconSize/2, w, GxEPD_BLACK);
-    
-    // Draw each prayer point
-    for(int i = 0; i < 5; i++) { // 5 daily prayers (excluding sunrise)
-        int iconX = x + (i * (iconSize + spacing));
-        int iconY = y;
-        
-        // Determine which prayer index to use (skipping sunrise)
-        int prayerIndex = (i >= 1) ? i + 1 : i;
-        
-        // Draw background circle if this is the current prayer
-        if(prayerIndex == currentPrayer) {
-            _display.fillRoundRect(iconX - 4, iconY - 4, 
-                                 iconSize + 8, iconSize + 35, 
-                                 5, GxEPD_BLACK);
+        // Handle background and highlighting
+        if (invertColors) {
+            // Dark mode: all prayers have dark background with white text
+            _display.fillRoundRect(
+                xLeft, 
+                y - HIGHLIGHT_PADDING, 
+                xInterval, 
+                boxheight + (2 * HIGHLIGHT_PADDING), 
+                HIGHLIGHT_RADIUS, 
+                GxEPD_BLACK
+            );
+            
+            // Current prayer gets white outline
+            if (isHighlighted) {
+                for (int16_t t = 0; t < OUTLINE_THICKNESS; t++) {
+                    _display.drawRoundRect(
+                        xLeft + t, 
+                        y - HIGHLIGHT_PADDING + t, 
+                        xInterval - (2 * t), 
+                        boxheight + (2 * HIGHLIGHT_PADDING) - (2 * t), 
+                        HIGHLIGHT_RADIUS,
+                        GxEPD_WHITE
+                    );
+                }
+            }
             _display.setTextColor(GxEPD_WHITE);
         } else {
-            _display.setTextColor(GxEPD_BLACK);
+            // Light mode: highlight current prayer with black background
+            if (isHighlighted) {
+                _display.fillRoundRect(
+                    xLeft, 
+                    y - HIGHLIGHT_PADDING, 
+                    xInterval, 
+                    //boxheight + (2 * HIGHLIGHT_PADDING),
+                    boxheight + 5, 
+                    HIGHLIGHT_RADIUS, 
+                    GxEPD_BLACK
+                );
+                _display.setTextColor(GxEPD_WHITE);
+            } else {
+                _display.setTextColor(GxEPD_BLACK);
+            }
         }
-        
-        // Draw prayer icon
-        const unsigned char* icon = getPrayerIcon(prayers[prayerIndex].name);
-        if(prayerIndex == currentPrayer) {
-            _display.drawInvertedBitmap(iconX, iconY, icon, iconSize, iconSize, GxEPD_WHITE);
-        } else {
-            _display.drawBitmap(iconX, iconY, icon, iconSize, iconSize, GxEPD_BLACK);
-        }
-        
-        // Draw prayer time below icon
-        _display.setFont(&FreeSans9pt7b);
-        String timeStr = formatTime(prayers[prayerIndex].time);
-        _renderer.drawString(iconX + iconSize/2, iconY + iconSize + 20, 
-                           timeStr, CENTER);
+
+        // Draw prayer name
+        _renderer.drawString(xCenter, yPrayerNames, prayers[i].name, CENTER);
+
+        // Draw the prayer icon
+        const unsigned char* icon = getPrayerIcon(prayers[i].name);
+
+        _display.drawBitmap(
+            xCenter - (PRAYER_ICON_WIDTH / 2),  // Center the icon horizontally
+            yPrayerIcons,                       // Position icon below name
+            icon,
+            PRAYER_ICON_WIDTH,
+            PRAYER_ICON_HEIGHT,
+            (invertColors || isHighlighted) ? GxEPD_WHITE : GxEPD_BLACK
+        );
+
+        // Draw prayer time
+        //String formattedTime = formatTime(prayers[i].time);
+        //_renderer.drawString(xCenter, yPrayerTimes, formattedTime, CENTER);
+        String formattedTime = formatTimelineTime(prayers[i].time);
+        _renderer.drawString(xCenter, yPrayerTimes, formattedTime, CENTER);
     }
-    
-    // Reset text color
+
+    // Reset text color to default
     _display.setTextColor(GxEPD_BLACK);
-    
-    */
 }
 
 bool PrayerTimes::isNightTime() const {
     time_t now = time(NULL);
-    // Between Isha and Fajr
-    return (now >= prayers[5].time) || (now < prayers[0].time);
+    
+    // Debug logging
+    char timeStr[30];
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    Serial.printf("\nChecking night time at: %s\n", timeStr);
+
+    // Log prayer times
+    char fajrStr[30], ishaStr[30];
+    strftime(fajrStr, sizeof(fajrStr), "%I:%M%p", localtime(&prayers[0].time));
+    strftime(ishaStr, sizeof(ishaStr), "%I:%M%p", localtime(&prayers[5].time));
+    Serial.printf("  Fajr time: %s\n", fajrStr);
+    Serial.printf("  Isha time: %s\n", ishaStr);
+
+    // If we're after Isha but before midnight
+    if (now >= prayers[5].time) {
+        Serial.println("  Night time: Yes (after Isha)");
+        return true;
+    }
+    
+    // If we're after midnight but before Fajr begins
+    if (now < prayers[0].time) {
+        Serial.println("  Night time: Yes (before Fajr)");
+        return true;
+    }
+    
+    Serial.println("  Night time: No (daytime or during Fajr)");
+    return false;
 }
 
 int PrayerTimes::getMinutesToNextPrayer() const {
@@ -1132,3 +688,63 @@ int PrayerTimes::getMinutesToNextPrayer() const {
     time_t now = time(NULL);
     return (prayers[nextPrayerIndex].time - now) / 60;
 }
+
+void PrayerTimes::updateDailyVerse() {
+    time_t now = time(nullptr);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    
+    // Check if we need to update the verse (new day or first run)
+    if (lastVerseUpdate == 0 || timeinfo.tm_mday != localtime(&lastVerseUpdate)->tm_mday) {
+        // Simple rotation through verses based on the day of the year
+        currentVerseIndex = timeinfo.tm_yday % NUM_VERSES;
+        lastVerseUpdate = now;
+        Serial.printf("Updated daily verse to index %d\n", currentVerseIndex);
+    }
+}
+
+void PrayerTimes::renderDailyVerse(bool invertColors) {
+    updateDailyVerse();
+    
+    // Calculate position for verse (in the bottom quarter, above status bar)
+    //int16_t verseY = _renderB - 80;  // Adjust this value as needed
+    int16_t verseY = _display.height() - (_display.height()/4) + 30;
+    int16_t maxWidth = _renderR - _renderL - 40;  // Leave margins
+    
+    // Set font and color
+    _display.setFont(&FreeSans9pt7b);
+    _display.setTextColor(invertColors ? GxEPD_WHITE : GxEPD_BLACK);
+    
+    // Draw the verse text
+    const QuranVerse& verse = DAILY_VERSES[currentVerseIndex];
+    
+    // Draw translation with multi-line support
+    _renderer.drawMultiLnString(_renderL + (_renderR - _renderL)/2, 
+                               verseY,
+                               String(verse.translation),
+                               CENTER,
+                               maxWidth,
+                               2,  // max 2 lines
+                               20); // line spacing
+    
+    // Draw reference below
+    _display.setFont(&FreeSans9pt7b);
+    _renderer.drawString(_renderL + (_renderR - _renderL)/2,
+                        verseY + 50,
+                        String("— ") + verse.reference,
+                        CENTER);
+}
+
+String PrayerTimes::formatTimelineTime(time_t t) {
+    char timeStr[6];
+    strftime(timeStr, sizeof(timeStr), "%I:%M", localtime(&t));
+    
+    // Convert to lowercase and remove leading zero
+    String formatted = String(timeStr);
+    if (formatted.startsWith("0")) {
+        formatted = formatted.substring(1);
+    }
+    return formatted;
+}
+
+

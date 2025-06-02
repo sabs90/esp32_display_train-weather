@@ -37,3 +37,13 @@ Read more about using header files in official GCC documentation:
 * Computed Includes
 
 https://gcc.gnu.org/onlinedocs/cpp/Header-Files.html
+
+Things to manually upload/amend: 
+- Secrets.h : wifi SSID & password
+- prayer_times.h: isha override - true/false & time
+- settings_server.h: calculation methodology and school
+- driver: config.h
+- Long/lat: settings_server.h
+- Long/lat: settings_server.cpp
+- Weather location: weather.cpp
+

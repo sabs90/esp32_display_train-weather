@@ -41,6 +41,8 @@ bool Weather::fetchWeatherData() {
     client.setInsecure(); // Ignore SSL certificate validation
 
     String url = "https://api.openweathermap.org/data/2.5/weather?q=Punchbowl,au&units=metric&appid=" + String(OPENWEATHER_API_KEY);
+    // LEETON String url = "https://api.openweathermap.org/data/2.5/weather?q=Leeton,au&units=metric&appid=" + String(OPENWEATHER_API_KEY);
+
 
     http.begin(client, url);
     int httpCode = http.GET();
