@@ -87,27 +87,23 @@ void setup() {
                               display.width() - 2*X_MARGIN, 
                               display.height() - 2*Y_MARGIN);
 
-  // WIFI
-  wl_status_t wifiStatus = startWiFi();
-  if (wifiStatus != WL_CONNECTED) {  // WiFi Connection Failed
-    if (!syncTime()) {
-      Serial.println("Time synchronization failed!");
-      // Handle the error (maybe retry or continue with unsynchronized time)
-    }
+  // Initialize settings server - this will handle WiFi connection and AP mode
+  settingsServer.begin();
+  
+  // Check if we're in AP mode or reconnection mode
+  if (settingsServer.isInAPMode || settingsServer.isInReconnectionMode()) {
+    Serial.println("Device is in setup mode - skipping normal initialization");
+    return; // Skip the rest of setup, loop will handle AP/reconnection mode
+  }
 
-    // Initialize settings server in AP mode - it will render the instructions
-    settingsServer.begin();  
-    
-    /* remove handle fatal error
-    handleFatalError(epd_bitmap_wifi_off, wifiStatus == WL_NO_SSID_AVAIL
-                                              ? "Network Not Available"
-                                              : "Wifi Connection Failed");
-    */
+  // Only proceed with normal setup if WiFi is connected
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected after settings server initialization");
     return;
   }
 
-  // Initialize settings server after WiFi is connected
-  settingsServer.begin();
+  Serial.println("WiFi connected successfully!");
+  Serial.println("IP: " + WiFi.localIP().toString());
 
   // TIME SYNCHRONIZATION
   configTzTime(TIMEZONE, NTP_SERVER_1, NTP_SERVER_2);
@@ -135,8 +131,40 @@ void loop() {
     uint32_t start = millis();
     SerialCommands::handleSerialCommands();
 
-    // Handle settings server
+    // Handle settings server with debugging
+    static unsigned long lastDebugTime = 0;
+    static int debugCounter = 0;
+    
     settingsServer.handle();
+    
+    // Print debug info every 10 seconds when in AP/reconnection mode
+    if ((settingsServer.isInAPMode || settingsServer.isInReconnectionMode()) && 
+        (millis() - lastDebugTime > 10000)) {
+        
+        lastDebugTime = millis();
+        debugCounter++;
+        
+        Serial.printf("\n--- DEBUG STATUS (cycle %d) ---\n", debugCounter);
+        Serial.printf("Time: %lu ms\n", millis());
+        Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+        Serial.printf("WiFi status: %d (%s)\n", WiFi.status(), 
+                     WiFi.status() == WL_CONNECTED ? "CONNECTED" :
+                     WiFi.status() == WL_NO_SSID_AVAIL ? "NO_SSID_AVAIL" :
+                     WiFi.status() == WL_CONNECT_FAILED ? "CONNECT_FAILED" :
+                     WiFi.status() == WL_CONNECTION_LOST ? "CONNECTION_LOST" :
+                     WiFi.status() == WL_DISCONNECTED ? "DISCONNECTED" : "OTHER");
+        
+        if (settingsServer.isInAPMode) {
+            Serial.printf("Mode: AP MODE\n");
+            Serial.printf("AP SSID: %s\n", WiFi.softAPSSID().c_str());
+            Serial.printf("AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+            Serial.printf("Connected stations: %d\n", WiFi.softAPgetStationNum());
+        } else if (settingsServer.isInReconnectionMode()) {
+            Serial.printf("Mode: RECONNECTION MODE\n");
+        }
+        
+        Serial.println("--- END DEBUG STATUS ---\n");
+    }
 
     // Check if in AP mode
     if (settingsServer.isInAPMode || settingsServer.isInReconnectionMode()) {
